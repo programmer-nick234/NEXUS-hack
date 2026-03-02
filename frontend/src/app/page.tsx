@@ -8,6 +8,7 @@ import Lenis from "lenis";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Sphere, Points, PointMaterial } from "@react-three/drei";
 import * as THREE from "three";
+import OnboardingOverlay, { useOnboarding } from "@/components/Onboarding";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    THEME
@@ -292,6 +293,7 @@ export default function HomePage() {
   const subtextRef = useRef<HTMLDivElement>(null);
   const buttonWrapRef = useRef<HTMLDivElement>(null);
   const badgeRef = useRef<HTMLDivElement>(null);
+  const { shouldShow: showOnboarding, dismiss: dismissOnboarding } = useOnboarding();
 
   useEffect(() => {
     setMounted(true);
@@ -319,6 +321,7 @@ export default function HomePage() {
 
   return (
     <div className="relative" style={{ background: C.bg }}>
+      {showOnboarding && <OnboardingOverlay onDismiss={dismissOnboarding} />}
       <Navbar />
 
       {/* ═══════ HERO ═══════ */}
