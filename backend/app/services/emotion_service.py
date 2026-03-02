@@ -283,4 +283,3 @@ class EmotionService:
 
 
 emotion_service = EmotionService()
-i need to make best open cv work on proper face detection and also 
