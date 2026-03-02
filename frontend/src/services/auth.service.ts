@@ -1,4 +1,4 @@
-import api from "@/lib/axios";
+import api, { resetRefreshGate } from "@/lib/axios";
 import type {
   ApiResponse,
   LoginCredentials,
@@ -12,6 +12,7 @@ export const authService = {
       "/auth/login",
       credentials,
     );
+    resetRefreshGate();
     return data.data.user;
   },
 
@@ -20,6 +21,7 @@ export const authService = {
       "/auth/register",
       payload,
     );
+    resetRefreshGate();
     return data.data.user;
   },
 

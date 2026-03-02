@@ -27,6 +27,7 @@ api.interceptors.request.use(
 // ─── Response Interceptor – Auto Refresh ─────────────────────────────────────
 
 let isRefreshing = false;
+let refreshFailed = false; // Once refresh fails, stop trying until next login
 let failedQueue: Array<{
   resolve: (value?: unknown) => void;
   reject: (reason?: unknown) => void;
@@ -40,13 +41,26 @@ const processQueue = (error: AxiosError | null) => {
   failedQueue = [];
 };
 
+/** Call this after a successful login/register to reset the refresh gate. */
+export const resetRefreshGate = () => {
+  refreshFailed = false;
+};
+
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    // Only attempt refresh on 401 that is NOT the refresh endpoint itself
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Never attempt refresh for auth endpoints or if refresh already failed this session
+    const url = originalRequest?.url || "";
+    const isAuthEndpoint = url.includes("/auth/");
+
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !isAuthEndpoint &&
+      !refreshFailed
+    ) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -61,11 +75,8 @@ api.interceptors.response.use(
         processQueue(null);
         return api(originalRequest);
       } catch (refreshError) {
+        refreshFailed = true; // Stop all future refresh attempts
         processQueue(refreshError as AxiosError);
-        // Redirect to login on refresh failure
-        if (typeof window !== "undefined") {
-          window.location.href = "/login";
-        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

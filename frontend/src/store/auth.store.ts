@@ -43,6 +43,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   refreshAuth: async () => {
+    // Only attempt auth hydration on dashboard pages
+    if (typeof window !== "undefined") {
+      const path = window.location.pathname;
+      if (!path.startsWith("/dashboard")) {
+        set({ isLoading: false });
+        return;
+      }
+    }
     set({ isLoading: true });
     try {
       const user = await authService.me();
