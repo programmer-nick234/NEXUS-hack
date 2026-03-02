@@ -13,7 +13,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import get_settings
 from app.core.logging import logger
 from app.db import connect_db, close_db
-from app.api.routes import auth, users, face, state, anxiety, sessions, gamification, suggestions, analytics, ws, gestures, relief
+from app.api.routes import auth, users, face, state, anxiety, sessions, gamification, suggestions, analytics, ws, gestures, relief, journal
 
 settings = get_settings()
 
@@ -92,6 +92,7 @@ app.include_router(suggestions.router, prefix=settings.API_V1_PREFIX)
 app.include_router(analytics.router, prefix=settings.API_V1_PREFIX)
 app.include_router(gestures.router, prefix=settings.API_V1_PREFIX)
 app.include_router(relief.router, prefix=settings.API_V1_PREFIX)
+app.include_router(journal.router, prefix=settings.API_V1_PREFIX)
 app.include_router(ws.router)
 
 
