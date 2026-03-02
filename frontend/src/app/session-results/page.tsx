@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSessionStore, useGamificationStore } from "@/store";
 import Link from "next/link";
+import EnergyBorder from "@/components/ui/EnergyBorder";
 import type { EmotionSnapshot, SessionEndResult, GamificationStats, Badge } from "@/types";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -412,7 +413,7 @@ export default function SessionResultsPage() {
     if (timeline.length === 0) return null;
     return timeline.reduce((best, snap) =>
       snap.confidence > best.confidence ? snap : best
-    , timeline[0]);
+      , timeline[0]);
   }, [timeline]);
 
   /* ── Empty state ─────────────────────────────────────────────────────── */
@@ -447,8 +448,8 @@ export default function SessionResultsPage() {
 
   const moodScoreColor =
     (result.moodScore ?? 0) >= 70 ? PALETTE.green
-    : (result.moodScore ?? 0) >= 40 ? PALETTE.yellow
-    : PALETTE.red;
+      : (result.moodScore ?? 0) >= 40 ? PALETTE.yellow
+        : PALETTE.red;
 
   return (
     <div className="min-h-screen" style={{ background: PALETTE.bg }}>
@@ -490,295 +491,311 @@ export default function SessionResultsPage() {
         </div>
 
         {/* ═══ HERO — Mood Score + Key Stats ══════════════════════════════ */}
-        <GlassCard glow={moodScoreColor} className="!p-8">
-          <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-8 items-center">
-            {/* Left: Gauge */}
-            <div className="flex flex-col items-center gap-4">
-              <MoodGauge score={result.moodScore ?? 0} size={200} />
-              <div className="flex items-center gap-2">
-                <span className="text-4xl">{EMOJI_MAP[result.dominantEmotion || "neutral"] || "😐"}</span>
-                <div>
-                  <p className="text-lg font-bold capitalize" style={{ color: EMOTION_COLORS[result.dominantEmotion || "neutral"] || PALETTE.text }}>
-                    {EMOTION_LABELS[result.dominantEmotion || "neutral"] || result.dominantEmotion}
-                  </p>
-                  <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Dominant Emotion</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Right: Stats grid */}
-            <div className="space-y-5">
-              <StabilityMeter value={result.stabilityIndex ?? 0} />
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <StatPill
-                  icon="⏱️"
-                  label="Duration"
-                  value={result.durationSec ? `${Math.floor(result.durationSec / 60)}m ${Math.round(result.durationSec % 60)}s` : "0s"}
-                  color={PALETTE.blue}
-                />
-                <StatPill
-                  icon="📸"
-                  label="Snapshots"
-                  value={String(result.totalSnapshots)}
-                  color={PALETTE.cyan}
-                />
-                <StatPill
-                  icon="🎯"
-                  label="Avg Confidence"
-                  value={`${avgConfidence}%`}
-                  color={PALETTE.accent}
-                />
-                <StatPill
-                  icon="🔄"
-                  label="Mood Switches"
-                  value={String(emotionSwitches)}
-                  color={PALETTE.yellow}
-                />
-              </div>
-
-              {/* XP & Badges (if authenticated) */}
-              {result.sessionXp != null && (
-                <div className="flex items-center gap-4 pt-2">
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: `${PALETTE.accent}15`, border: `1px solid ${PALETTE.accent}30` }}>
-                    <span className="text-lg">⚡</span>
-                    <span className="text-lg font-bold" style={{ color: PALETTE.accent }}>+{result.sessionXp} XP</span>
+        <EnergyBorder alwaysOn className="rounded-2xl" thickness={2} color={moodScoreColor} glowIntensity={1.2}>
+          <GlassCard glow={moodScoreColor} className="!p-8">
+            <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-8 items-center">
+              {/* Left: Gauge */}
+              <div className="flex flex-col items-center gap-4">
+                <MoodGauge score={result.moodScore ?? 0} size={200} />
+                <div className="flex items-center gap-2">
+                  <span className="text-4xl">{EMOJI_MAP[result.dominantEmotion || "neutral"] || "😐"}</span>
+                  <div>
+                    <p className="text-lg font-bold capitalize" style={{ color: EMOTION_COLORS[result.dominantEmotion || "neutral"] || PALETTE.text }}>
+                      {EMOTION_LABELS[result.dominantEmotion || "neutral"] || result.dominantEmotion}
+                    </p>
+                    <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Dominant Emotion</p>
                   </div>
-                  {result.level != null && (
-                    <span className="text-sm font-medium" style={{ color: PALETTE.dim }}>Level {result.level}</span>
-                  )}
-                  {result.newBadges && result.newBadges.length > 0 && (
-                    <div className="flex gap-2">
-                      {result.newBadges.map((b) => (
-                        <div key={b.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ background: `${PALETTE.yellow}15`, border: `1px solid ${PALETTE.yellow}30` }}>
-                          <span className="text-xl">{b.icon}</span>
-                          <span className="text-xs font-medium" style={{ color: PALETTE.yellow }}>{b.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
-              )}
+              </div>
+
+              {/* Right: Stats grid */}
+              <div className="space-y-5">
+                <StabilityMeter value={result.stabilityIndex ?? 0} />
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <StatPill
+                    icon="⏱️"
+                    label="Duration"
+                    value={result.durationSec ? `${Math.floor(result.durationSec / 60)}m ${Math.round(result.durationSec % 60)}s` : "0s"}
+                    color={PALETTE.blue}
+                  />
+                  <StatPill
+                    icon="📸"
+                    label="Snapshots"
+                    value={String(result.totalSnapshots)}
+                    color={PALETTE.cyan}
+                  />
+                  <StatPill
+                    icon="🎯"
+                    label="Avg Confidence"
+                    value={`${avgConfidence}%`}
+                    color={PALETTE.accent}
+                  />
+                  <StatPill
+                    icon="🔄"
+                    label="Mood Switches"
+                    value={String(emotionSwitches)}
+                    color={PALETTE.yellow}
+                  />
+                </div>
+
+                {/* XP & Badges (if authenticated) */}
+                {result.sessionXp != null && (
+                  <div className="flex items-center gap-4 pt-2">
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: `${PALETTE.accent}15`, border: `1px solid ${PALETTE.accent}30` }}>
+                      <span className="text-lg">⚡</span>
+                      <span className="text-lg font-bold" style={{ color: PALETTE.accent }}>+{result.sessionXp} XP</span>
+                    </div>
+                    {result.level != null && (
+                      <span className="text-sm font-medium" style={{ color: PALETTE.dim }}>Level {result.level}</span>
+                    )}
+                    {result.newBadges && result.newBadges.length > 0 && (
+                      <div className="flex gap-2">
+                        {result.newBadges.map((b) => (
+                          <div key={b.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ background: `${PALETTE.yellow}15`, border: `1px solid ${PALETTE.yellow}30` }}>
+                            <span className="text-xl">{b.icon}</span>
+                            <span className="text-xs font-medium" style={{ color: PALETTE.yellow }}>{b.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </GlassCard>
+          </GlassCard>
+        </EnergyBorder>
 
         {/* ═══ EMOTION TIMELINE ═══════════════════════════════════════════ */}
-        <GlassCard>
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="text-sm font-bold uppercase tracking-wider" style={{ color: PALETTE.text }}>Emotion Timeline</h2>
-              <p className="text-xs mt-0.5" style={{ color: PALETTE.muted }}>How your emotions evolved during the session</p>
+        <EnergyBorder alwaysOn className="rounded-2xl" thickness={1.5} color={PALETTE.accent}>
+          <GlassCard>
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-wider" style={{ color: PALETTE.text }}>Emotion Timeline</h2>
+                <p className="text-xs mt-0.5" style={{ color: PALETTE.muted }}>How your emotions evolved during the session</p>
+              </div>
+              <span className="text-xs px-3 py-1 rounded-full" style={{ background: `${PALETTE.accent}15`, color: PALETTE.accent }}>
+                {timeline.length} samples
+              </span>
             </div>
-            <span className="text-xs px-3 py-1 rounded-full" style={{ background: `${PALETTE.accent}15`, color: PALETTE.accent }}>
-              {timeline.length} samples
-            </span>
-          </div>
-          <EmotionTimeline timeline={timeline} />
-        </GlassCard>
+            <EmotionTimeline timeline={timeline} />
+          </GlassCard>
+        </EnergyBorder>
 
         {/* ═══ TWO-COL: Distribution + Donut ══════════════════════════════ */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <GlassCard>
-            <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: PALETTE.text }}>
-              Emotion Breakdown
-            </h2>
-            <EmotionDistribution timeline={timeline} />
-            {timeline.length === 0 && (
-              <p className="text-sm" style={{ color: PALETTE.muted }}>No data available</p>
-            )}
-          </GlassCard>
+          <EnergyBorder alwaysOn className="rounded-2xl" thickness={1.2} color={PALETTE.dim}>
+            <GlassCard>
+              <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: PALETTE.text }}>
+                Emotion Breakdown
+              </h2>
+              <EmotionDistribution timeline={timeline} />
+              {timeline.length === 0 && (
+                <p className="text-sm" style={{ color: PALETTE.muted }}>No data available</p>
+              )}
+            </GlassCard>
+          </EnergyBorder>
 
-          <GlassCard className="flex flex-col items-center justify-center gap-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider self-start" style={{ color: PALETTE.text }}>
-              Emotion Share
-            </h2>
-            {timeline.length > 0 ? (
-              <>
-                <EmotionDonut timeline={timeline} size={180} />
-                {peakEmotion && (
-                  <div className="text-center">
-                    <p className="text-xs" style={{ color: PALETTE.muted }}>Peak confidence moment</p>
-                    <p className="text-sm font-bold capitalize" style={{ color: EMOTION_COLORS[peakEmotion.emotion] || PALETTE.text }}>
-                      {peakEmotion.emotion} — {(peakEmotion.confidence * 100).toFixed(0)}%
-                    </p>
-                    <p className="text-[10px]" style={{ color: PALETTE.muted }}>
-                      at {new Date(peakEmotion.ts).toLocaleTimeString()}
-                    </p>
-                  </div>
-                )}
-              </>
-            ) : (
-              <p className="text-sm" style={{ color: PALETTE.muted }}>No data available</p>
-            )}
-          </GlassCard>
+          <EnergyBorder alwaysOn className="rounded-2xl" thickness={1.2} color={PALETTE.dim}>
+            <GlassCard className="flex flex-col items-center justify-center gap-4">
+              <h2 className="text-sm font-bold uppercase tracking-wider self-start" style={{ color: PALETTE.text }}>
+                Emotion Share
+              </h2>
+              {timeline.length > 0 ? (
+                <>
+                  <EmotionDonut timeline={timeline} size={180} />
+                  {peakEmotion && (
+                    <div className="text-center">
+                      <p className="text-xs" style={{ color: PALETTE.muted }}>Peak confidence moment</p>
+                      <p className="text-sm font-bold capitalize" style={{ color: EMOTION_COLORS[peakEmotion.emotion] || PALETTE.text }}>
+                        {peakEmotion.emotion} — {(peakEmotion.confidence * 100).toFixed(0)}%
+                      </p>
+                      <p className="text-[10px]" style={{ color: PALETTE.muted }}>
+                        at {new Date(peakEmotion.ts).toLocaleTimeString()}
+                      </p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm" style={{ color: PALETTE.muted }}>No data available</p>
+              )}
+            </GlassCard>
+          </EnergyBorder>
         </div>
 
         {/* ═══ CONFIDENCE TREND ═══════════════════════════════════════════ */}
         {timeline.length > 2 && (
-          <GlassCard>
-            <h2 className="text-sm font-bold uppercase tracking-wider mb-3" style={{ color: PALETTE.text }}>
-              Detection Confidence Over Time
-            </h2>
-            <p className="text-xs mb-4" style={{ color: PALETTE.muted }}>
-              How confidently the AI detected your emotions
-            </p>
-            <ConfidenceTrend timeline={timeline} />
-          </GlassCard>
+          <EnergyBorder alwaysOn className="rounded-2xl" thickness={1.2} color={PALETTE.cyan}>
+            <GlassCard>
+              <h2 className="text-sm font-bold uppercase tracking-wider mb-3" style={{ color: PALETTE.text }}>
+                Detection Confidence Over Time
+              </h2>
+              <p className="text-xs mb-4" style={{ color: PALETTE.muted }}>
+                How confidently the AI detected your emotions
+              </p>
+              <ConfidenceTrend timeline={timeline} />
+            </GlassCard>
+          </EnergyBorder>
         )}
 
         {/* ═══ AI INSIGHTS ════════════════════════════════════════════════ */}
         {insights.length > 0 && (
-          <GlassCard glow={PALETTE.accent}>
-            <div className="flex items-center gap-2 mb-5">
-              <span className="text-xl">🧠</span>
-              <h2 className="text-sm font-bold uppercase tracking-wider" style={{ color: PALETTE.text }}>
-                AI Insights & Recommendations
-              </h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {insights.map((ins, i) => (
-                <div
-                  key={i}
-                  className="flex gap-3 rounded-xl p-4"
-                  style={{ background: `${ins.color}08`, border: `1px solid ${ins.color}20` }}
-                >
-                  <span className="text-2xl shrink-0">{ins.icon}</span>
-                  <div>
-                    <p className="text-sm font-bold" style={{ color: ins.color }}>{ins.title}</p>
-                    <p className="text-xs mt-0.5" style={{ color: PALETTE.dim }}>{ins.description}</p>
+          <EnergyBorder alwaysOn className="rounded-2xl" thickness={1.5} color={PALETTE.accent} glowIntensity={1.1}>
+            <GlassCard glow={PALETTE.accent}>
+              <div className="flex items-center gap-2 mb-5">
+                <span className="text-xl">🧠</span>
+                <h2 className="text-sm font-bold uppercase tracking-wider" style={{ color: PALETTE.text }}>
+                  AI Insights & Recommendations
+                </h2>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {insights.map((ins, i) => (
+                  <div
+                    key={i}
+                    className="flex gap-3 rounded-xl p-4"
+                    style={{ background: `${ins.color}08`, border: `1px solid ${ins.color}20` }}
+                  >
+                    <span className="text-2xl shrink-0">{ins.icon}</span>
+                    <div>
+                      <p className="text-sm font-bold" style={{ color: ins.color }}>{ins.title}</p>
+                      <p className="text-xs mt-0.5" style={{ color: PALETTE.dim }}>{ins.description}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </GlassCard>
+                ))}
+              </div>
+            </GlassCard>
+          </EnergyBorder>
         )}
 
         {/* ═══ HISTORICAL COMPARISON ══════════════════════════════════════ */}
         {loaded && a.totalSessions > 1 && (
-          <GlassCard>
-            <h2 className="text-sm font-bold uppercase tracking-wider mb-5" style={{ color: PALETTE.text }}>
-              Historical Comparison
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="text-center">
-                <p className="text-2xl font-bold" style={{ color: PALETTE.accent }}>{a.totalSessions}</p>
-                <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Total Sessions</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold" style={{ color: PALETTE.green }}>{a.avgMoodScore}</p>
-                <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Avg Mood Score</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold" style={{ color: PALETTE.purple }}>{a.avgStability}</p>
-                <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Avg Stability</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold" style={{ color: PALETTE.cyan }}>{a.totalMinutes}m</p>
-                <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Total Minutes</p>
-              </div>
-            </div>
-
-            {/* Mood trend */}
-            {a.moodTrend.length > 0 && (
-              <>
-                <p className="text-xs font-medium mb-3" style={{ color: PALETTE.dim }}>
-                  Mood Trend (last {a.moodTrend.length} sessions)
-                </p>
-                <div className="flex items-end gap-1 h-24">
-                  {a.moodTrend.map((p, i) => {
-                    const h = Math.max(8, (p.moodScore / 100) * 100);
-                    const isLatest = i === a.moodTrend.length - 1;
-                    const color = isLatest ? PALETTE.accent : p.moodScore >= 70 ? PALETTE.green : p.moodScore >= 40 ? PALETTE.yellow : PALETTE.red;
-                    return (
-                      <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                        <div
-                          className={`w-full rounded-t transition-all duration-500 ${isLatest ? "ring-2 ring-indigo-400 ring-offset-1 ring-offset-transparent" : ""}`}
-                          style={{
-                            height: `${h}%`,
-                            backgroundColor: color,
-                            minHeight: 4,
-                          }}
-                          title={`Score: ${p.moodScore}`}
-                        />
-                        <span className="text-[9px] truncate w-full text-center" style={{ color: PALETTE.muted }}>
-                          {new Date(p.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                        </span>
-                      </div>
-                    );
-                  })}
+          <EnergyBorder alwaysOn className="rounded-2xl" thickness={1.2} color={PALETTE.accent}>
+            <GlassCard>
+              <h2 className="text-sm font-bold uppercase tracking-wider mb-5" style={{ color: PALETTE.text }}>
+                Historical Comparison
+              </h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="text-center">
+                  <p className="text-2xl font-bold" style={{ color: PALETTE.accent }}>{a.totalSessions}</p>
+                  <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Total Sessions</p>
                 </div>
-              </>
-            )}
-          </GlassCard>
+                <div className="text-center">
+                  <p className="text-2xl font-bold" style={{ color: PALETTE.green }}>{a.avgMoodScore}</p>
+                  <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Avg Mood Score</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold" style={{ color: PALETTE.purple }}>{a.avgStability}</p>
+                  <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Avg Stability</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold" style={{ color: PALETTE.cyan }}>{a.totalMinutes}m</p>
+                  <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Total Minutes</p>
+                </div>
+              </div>
+
+              {/* Mood trend */}
+              {a.moodTrend.length > 0 && (
+                <>
+                  <p className="text-xs font-medium mb-3" style={{ color: PALETTE.dim }}>
+                    Mood Trend (last {a.moodTrend.length} sessions)
+                  </p>
+                  <div className="flex items-end gap-1 h-24">
+                    {a.moodTrend.map((p, i) => {
+                      const h = Math.max(8, (p.moodScore / 100) * 100);
+                      const isLatest = i === a.moodTrend.length - 1;
+                      const color = isLatest ? PALETTE.accent : p.moodScore >= 70 ? PALETTE.green : p.moodScore >= 40 ? PALETTE.yellow : PALETTE.red;
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                          <div
+                            className={`w-full rounded-t transition-all duration-500 ${isLatest ? "ring-2 ring-indigo-400 ring-offset-1 ring-offset-transparent" : ""}`}
+                            style={{
+                              height: `${h}%`,
+                              backgroundColor: color,
+                              minHeight: 4,
+                            }}
+                            title={`Score: ${p.moodScore}`}
+                          />
+                          <span className="text-[9px] truncate w-full text-center" style={{ color: PALETTE.muted }}>
+                            {new Date(p.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </GlassCard>
+          </EnergyBorder>
         )}
 
         {/* ═══ GAMIFICATION (if logged in) ════════════════════════════════ */}
         {stats && (
-          <GlassCard glow={PALETTE.purple}>
-            <h2 className="text-sm font-bold uppercase tracking-wider mb-5" style={{ color: PALETTE.text }}>
-              Your Progress
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
-              <div className="text-center">
-                <p className="text-2xl font-bold" style={{ color: PALETTE.accent }}>{stats.xp}</p>
-                <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Total XP</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold" style={{ color: PALETTE.purple }}>Lv. {stats.level}</p>
-                <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Level</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold" style={{ color: PALETTE.yellow }}>🔥 {stats.currentStreak}</p>
-                <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Day Streak</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold" style={{ color: PALETTE.green }}>{stats.totalSessions}</p>
-                <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Sessions</p>
-              </div>
-            </div>
-
-            {/* XP progress bar */}
-            <div>
-              <div className="flex justify-between mb-1.5">
-                <span className="text-xs" style={{ color: PALETTE.dim }}>Level {stats.level} → {stats.level + 1}</span>
-                <span className="text-xs font-bold" style={{ color: PALETTE.accent }}>{stats.levelProgress.percent}%</span>
-              </div>
-              <div className="h-3 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-1000"
-                  style={{ width: `${stats.levelProgress.percent}%` }}
-                />
-              </div>
-              <p className="text-[10px] mt-1" style={{ color: PALETTE.muted }}>
-                {stats.levelProgress.current} / {stats.levelProgress.required} XP
-              </p>
-            </div>
-
-            {/* Badges row */}
-            {allBadges.length > 0 && (
-              <div className="mt-5">
-                <p className="text-xs font-medium mb-3" style={{ color: PALETTE.dim }}>Achievements</p>
-                <div className="flex flex-wrap gap-3">
-                  {allBadges.map((b) => (
-                    <div
-                      key={b.id}
-                      className={`flex items-center gap-2 rounded-xl px-3 py-2 transition-all ${b.earned ? "opacity-100" : "opacity-30"}`}
-                      style={{
-                        background: b.earned ? `${PALETTE.accent}10` : "rgba(255,255,255,0.02)",
-                        border: `1px solid ${b.earned ? PALETTE.accent + "30" : "rgba(255,255,255,0.05)"}`,
-                      }}
-                    >
-                      <span className="text-xl">{b.icon}</span>
-                      <div>
-                        <p className="text-[11px] font-medium" style={{ color: b.earned ? PALETTE.text : PALETTE.muted }}>{b.name}</p>
-                        <p className="text-[9px]" style={{ color: PALETTE.muted }}>{b.description}</p>
-                      </div>
-                    </div>
-                  ))}
+          <EnergyBorder alwaysOn className="rounded-2xl" thickness={1.5} color={PALETTE.purple} glowIntensity={1.2}>
+            <GlassCard glow={PALETTE.purple}>
+              <h2 className="text-sm font-bold uppercase tracking-wider mb-5" style={{ color: PALETTE.text }}>
+                Your Progress
+              </h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+                <div className="text-center">
+                  <p className="text-2xl font-bold" style={{ color: PALETTE.accent }}>{stats.xp}</p>
+                  <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Total XP</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold" style={{ color: PALETTE.purple }}>Lv. {stats.level}</p>
+                  <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Level</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold" style={{ color: PALETTE.yellow }}>🔥 {stats.currentStreak}</p>
+                  <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Day Streak</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold" style={{ color: PALETTE.green }}>{stats.totalSessions}</p>
+                  <p className="text-[10px] uppercase tracking-wider" style={{ color: PALETTE.muted }}>Sessions</p>
                 </div>
               </div>
-            )}
-          </GlassCard>
+
+              {/* XP progress bar */}
+              <div>
+                <div className="flex justify-between mb-1.5">
+                  <span className="text-xs" style={{ color: PALETTE.dim }}>Level {stats.level} → {stats.level + 1}</span>
+                  <span className="text-xs font-bold" style={{ color: PALETTE.accent }}>{stats.levelProgress.percent}%</span>
+                </div>
+                <div className="h-3 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-1000"
+                    style={{ width: `${stats.levelProgress.percent}%` }}
+                  />
+                </div>
+                <p className="text-[10px] mt-1" style={{ color: PALETTE.muted }}>
+                  {stats.levelProgress.current} / {stats.levelProgress.required} XP
+                </p>
+              </div>
+
+              {/* Badges row */}
+              {allBadges.length > 0 && (
+                <div className="mt-5">
+                  <p className="text-xs font-medium mb-3" style={{ color: PALETTE.dim }}>Achievements</p>
+                  <div className="flex flex-wrap gap-3">
+                    {allBadges.map((b) => (
+                      <div
+                        key={b.id}
+                        className={`flex items-center gap-2 rounded-xl px-3 py-2 transition-all ${b.earned ? "opacity-100" : "opacity-30"}`}
+                        style={{
+                          background: b.earned ? `${PALETTE.accent}10` : "rgba(255,255,255,0.02)",
+                          border: `1px solid ${b.earned ? PALETTE.accent + "30" : "rgba(255,255,255,0.05)"}`,
+                        }}
+                      >
+                        <span className="text-xl">{b.icon}</span>
+                        <div>
+                          <p className="text-[11px] font-medium" style={{ color: b.earned ? PALETTE.text : PALETTE.muted }}>{b.name}</p>
+                          <p className="text-[9px]" style={{ color: PALETTE.muted }}>{b.description}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </GlassCard>
+          </EnergyBorder>
         )}
 
         {/* ═══ RECENT SESSIONS ════════════════════════════════════════════ */}
@@ -803,8 +820,8 @@ export default function SessionResultsPage() {
                       <p className="text-[10px]" style={{ color: PALETTE.muted }}>
                         {s.endedAt
                           ? new Date(s.endedAt).toLocaleDateString(undefined, {
-                              month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-                            })
+                            month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                          })
                           : "In progress"}
                       </p>
                     </div>

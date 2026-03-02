@@ -6,7 +6,9 @@ import { Sphere, MeshDistortMaterial, Points, PointMaterial } from "@react-three
 import * as THREE from "three";
 import { gsap } from "gsap";
 import { useSessionStore, useGamificationStore } from "@/store";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import EnergyBorder from "@/components/ui/EnergyBorder";
+import { memo } from "react";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    TYPES
@@ -303,6 +305,55 @@ function captureFrame(
    MAIN PAGE
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   SUB-COMPONENTS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const BackButton = memo(function BackButton() {
+  const router = useRouter();
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (btnRef.current) {
+      gsap.fromTo(btnRef.current,
+        { opacity: 0, x: -20 },
+        { opacity: 1, x: 0, duration: 0.8, delay: 0.5, ease: "power3.out" }
+      );
+    }
+  }, []);
+
+  const handleMouseEnter = () => {
+    gsap.to(btnRef.current, {
+      scale: 1.05,
+      boxShadow: "0 0 20px rgba(255, 90, 31, 0.4)",
+      borderColor: "rgba(255, 90, 31, 0.6)",
+      duration: 0.3
+    });
+  };
+
+  const handleMouseLeave = () => {
+    gsap.to(btnRef.current, {
+      scale: 1,
+      boxShadow: "0 0 0px rgba(255, 90, 31, 0)",
+      borderColor: "rgba(255, 90, 31, 0.3)",
+      duration: 0.3
+    });
+  };
+
+  return (
+    <button
+      ref={btnRef}
+      onClick={() => router.push("/")}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className="absolute top-3 left-6 z-[100] flex items-center gap-2 px-4 py-2 rounded-full border border-[#FF5A1F]/30 bg-black/60 text-white transition-all backdrop-blur-md group overflow-hidden"
+    >
+      <span className="text-lg group-hover:-translate-x-1 transition-transform duration-300">←</span>
+      <span className="text-xs font-bold tracking-widest uppercase opacity-80 group-hover:opacity-100 transition-opacity">Back</span>
+    </button>
+  );
+});
+
 export default function MoodAnalyzePage() {
   // ── Session & gamification stores ──────────────────────────────────────
   const {
@@ -548,6 +599,7 @@ export default function MoodAnalyzePage() {
 
   return (
     <main className="relative w-screen h-screen overflow-hidden select-none font-sans" style={{ background: PALETTE.bg }}>
+      <BackButton />
       {/* ── Cinematic Smoke Layer Overlay ── */}
       <div className="absolute inset-0 z-5 pointer-events-none opacity-40">
         <Canvas camera={{ position: [0, 0, 5], fov: 60 }}>
@@ -573,19 +625,21 @@ export default function MoodAnalyzePage() {
         {/* ─── TOP-LEFT: Webcam Preview ───────────────────────────────── */}
         <div className="p-5 flex flex-col gap-3">
           <p className="text-[10px] font-bold tracking-[0.25em] uppercase" style={{ color: PALETTE.textMuted }}>OpenCV Detection</p>
-          <div className="relative rounded-2xl overflow-hidden border" style={{ borderColor: PALETTE.border, background: "#000" }}>
-            <video ref={videoRef} autoPlay muted playsInline className="w-full aspect-[4/3] object-cover" />
-            {/* Live badge */}
-            <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider" style={{ background: "rgba(0,0,0,0.6)", color: isDetecting ? PALETTE.green : PALETTE.red }}>
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: isDetecting ? PALETTE.green : PALETTE.red }} />
-              {isDetecting ? "LIVE" : "OFFLINE"}
+          <EnergyBorder alwaysOn className="rounded-2xl" thickness={1.5}>
+            <div className="relative rounded-2xl overflow-hidden border" style={{ borderColor: PALETTE.border, background: "#000" }}>
+              <video ref={videoRef} autoPlay muted playsInline className="w-full aspect-[4/3] object-cover" />
+              {/* Live badge */}
+              <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider" style={{ background: "rgba(0,0,0,0.6)", color: isDetecting ? PALETTE.green : PALETTE.red }}>
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: isDetecting ? PALETTE.green : PALETTE.red }} />
+                {isDetecting ? "LIVE" : "OFFLINE"}
+              </div>
+              {/* Emotion overlay */}
+              <div className="absolute bottom-0 inset-x-0 px-3 py-2" style={{ background: "linear-gradient(transparent, rgba(0,0,0,0.85))" }}>
+                <p className="text-lg font-bold capitalize" style={{ color: EMOTION_COLORS[faceEmotion] ?? PALETTE.text }}>{faceEmotion}</p>
+                <p className="text-[10px]" style={{ color: PALETTE.textDim }}>{(confidence * 100).toFixed(0)}% confidence</p>
+              </div>
             </div>
-            {/* Emotion overlay */}
-            <div className="absolute bottom-0 inset-x-0 px-3 py-2" style={{ background: "linear-gradient(transparent, rgba(0,0,0,0.85))" }}>
-              <p className="text-lg font-bold capitalize" style={{ color: EMOTION_COLORS[faceEmotion] ?? PALETTE.text }}>{faceEmotion}</p>
-              <p className="text-[10px]" style={{ color: PALETTE.textDim }}>{(confidence * 100).toFixed(0)}% confidence</p>
-            </div>
-          </div>
+          </EnergyBorder>
           {/* Emotion breakdown bars */}
           <div className="space-y-1.5 mt-1">
             {(["happy", "sad", "angry", "neutral", "surprised", "fear", "disgust"] as const).map((e) => {
@@ -646,47 +700,53 @@ export default function MoodAnalyzePage() {
             </button>
           </div>
 
-          <div className="rounded-2xl p-4 flex flex-col items-center gap-3" style={{ background: PALETTE.surface, border: `1px solid ${PALETTE.border}` }}>
-            <div className="text-6xl">{displayEmoji}</div>
-            <p className="text-xl font-bold capitalize" style={{ color: activeColor }}>{displayState}</p>
-            <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: PALETTE.surfaceLight }}>
-              <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(analysis?.intensity ?? confidence) * 100}%`, background: activeColor }} />
+          <EnergyBorder alwaysOn className="rounded-2xl" thickness={1.5} color={activeColor}>
+            <div className="rounded-2xl p-4 flex flex-col items-center gap-3" style={{ background: PALETTE.surface, border: `1px solid ${PALETTE.border}` }}>
+              <div className="text-6xl">{displayEmoji}</div>
+              <p className="text-xl font-bold capitalize" style={{ color: activeColor }}>{displayState}</p>
+              <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: PALETTE.surfaceLight }}>
+                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(analysis?.intensity ?? confidence) * 100}%`, background: activeColor }} />
+              </div>
+              <p className="text-[10px]" style={{ color: PALETTE.textDim }}>Intensity: {((analysis?.intensity ?? confidence) * 100).toFixed(0)}%</p>
             </div>
-            <p className="text-[10px]" style={{ color: PALETTE.textDim }}>Intensity: {((analysis?.intensity ?? confidence) * 100).toFixed(0)}%</p>
-          </div>
+          </EnergyBorder>
 
           {/* Intervention card */}
           {analysis && (
-            <div className="rounded-2xl p-4 space-y-2" style={{ background: PALETTE.surface, border: `1px solid ${PALETTE.border}` }}>
-              <p className="text-[10px] font-bold tracking-[0.2em] uppercase" style={{ color: PALETTE.textMuted }}>Intervention</p>
-              <p className="text-sm font-semibold capitalize" style={{ color: activeColor }}>{analysis.interventionType}</p>
-              <div className="grid grid-cols-2 gap-2 text-[10px]" style={{ color: PALETTE.textDim }}>
-                <span>Breath: {analysis.parameters.breathSpeed}s</span>
-                <span>Particles: {analysis.parameters.particleSpeed}</span>
+            <EnergyBorder alwaysOn className="rounded-2xl" thickness={1.2} color={activeColor} glowIntensity={0.8}>
+              <div className="rounded-2xl p-4 space-y-2" style={{ background: PALETTE.surface, border: `1px solid ${PALETTE.border}` }}>
+                <p className="text-[10px] font-bold tracking-[0.2em] uppercase" style={{ color: PALETTE.textMuted }}>Intervention</p>
+                <p className="text-sm font-semibold capitalize" style={{ color: activeColor }}>{analysis.interventionType}</p>
+                <div className="grid grid-cols-2 gap-2 text-[10px]" style={{ color: PALETTE.textDim }}>
+                  <span>Breath: {analysis.parameters.breathSpeed}s</span>
+                  <span>Particles: {analysis.parameters.particleSpeed}</span>
+                </div>
               </div>
-            </div>
+            </EnergyBorder>
           )}
 
           {/* AI Suggestion card */}
           {suggestion && suggestion.suggestions.length > 0 && (
-            <div className="rounded-2xl p-4 space-y-2" style={{ background: PALETTE.surface, border: `1px solid ${PALETTE.border}` }}>
-              <p className="text-[10px] font-bold tracking-[0.2em] uppercase" style={{ color: PALETTE.textMuted }}>AI Suggestion</p>
-              <p className="text-xs" style={{ color: PALETTE.textDim }}>{suggestion.message}</p>
-              <div className="space-y-1.5">
-                {suggestion.suggestions.slice(0, 2).map((s) => (
-                  <div key={s.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5" style={{ background: PALETTE.surfaceLight }}>
-                    <span className="text-lg">{s.icon}</span>
-                    <div>
-                      <p className="text-[11px] font-medium" style={{ color: PALETTE.text }}>{s.name}</p>
-                      <p className="text-[9px]" style={{ color: PALETTE.textMuted }}>{s.category} · {s.duration_sec}s</p>
+            <EnergyBorder alwaysOn className="rounded-2xl" thickness={1.2} color={PALETTE.accent} glowIntensity={0.8}>
+              <div className="rounded-2xl p-4 space-y-2" style={{ background: PALETTE.surface, border: `1px solid ${PALETTE.border}` }}>
+                <p className="text-[10px] font-bold tracking-[0.2em] uppercase" style={{ color: PALETTE.textMuted }}>AI Suggestion</p>
+                <p className="text-xs" style={{ color: PALETTE.textDim }}>{suggestion.message}</p>
+                <div className="space-y-1.5">
+                  {suggestion.suggestions.slice(0, 2).map((s) => (
+                    <div key={s.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5" style={{ background: PALETTE.surfaceLight }}>
+                      <span className="text-lg">{s.icon}</span>
+                      <div>
+                        <p className="text-[11px] font-medium" style={{ color: PALETTE.text }}>{s.name}</p>
+                        <p className="text-[9px]" style={{ color: PALETTE.textMuted }}>{s.category} · {s.duration_sec}s</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                {suggestion.pattern.insight && (
+                  <p className="text-[10px] italic pt-1" style={{ color: PALETTE.accent }}>{suggestion.pattern.insight}</p>
+                )}
               </div>
-              {suggestion.pattern.insight && (
-                <p className="text-[10px] italic pt-1" style={{ color: PALETTE.accent }}>{suggestion.pattern.insight}</p>
-              )}
-            </div>
+            </EnergyBorder>
           )}
         </div>
 
@@ -698,32 +758,34 @@ export default function MoodAnalyzePage() {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
         >
-          <div
-            className="rounded-2xl p-4 flex flex-col gap-3 cursor-grab active:cursor-grabbing transition-shadow duration-300"
-            style={{
-              background: gestureActive ? `${activeColor}10` : PALETTE.surface,
-              border: `1px solid ${gestureActive ? activeColor : PALETTE.border}`,
-              boxShadow: gestureActive ? `0 0 30px ${activeColor}30` : "none",
-            }}
-          >
-            <p className="text-[10px] font-bold tracking-[0.25em] uppercase" style={{ color: PALETTE.textMuted }}>Gesture Zone</p>
-            <div className="h-24 rounded-xl flex items-center justify-center" style={{ background: PALETTE.surfaceLight }}>
-              {gestureActive ? (
-                <div className="flex flex-col items-center gap-1">
-                  <span className="text-sm font-bold animate-pulse" style={{ color: activeColor }}>Capturing...</span>
-                  <ThinkingDots />
+          <EnergyBorder alwaysOn className="rounded-2xl" thickness={2} color={activeColor}>
+            <div
+              className="rounded-2xl p-4 flex flex-col gap-3 cursor-grab active:cursor-grabbing transition-shadow duration-300"
+              style={{
+                background: gestureActive ? `${activeColor}10` : PALETTE.surface,
+                border: `1px solid ${gestureActive ? activeColor : PALETTE.border}`,
+                boxShadow: gestureActive ? `0 0 30px ${activeColor}30` : "none",
+              }}
+            >
+              <p className="text-[10px] font-bold tracking-[0.25em] uppercase" style={{ color: PALETTE.textMuted }}>Gesture Zone</p>
+              <div className="h-24 rounded-xl flex items-center justify-center" style={{ background: PALETTE.surfaceLight }}>
+                {gestureActive ? (
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-sm font-bold animate-pulse" style={{ color: activeColor }}>Capturing...</span>
+                    <ThinkingDots />
+                  </div>
+                ) : (
+                  <p className="text-xs" style={{ color: PALETTE.textMuted }}>Swipe or hold here</p>
+                )}
+              </div>
+              {analysis && (
+                <div className="flex justify-between text-[10px]" style={{ color: PALETTE.textDim }}>
+                  <span>Score: {(analysis.anxietyScore * 100).toFixed(0)}%</span>
+                  <span className="capitalize font-semibold" style={{ color: activeColor }}>{analysis.emotionalState}</span>
                 </div>
-              ) : (
-                <p className="text-xs" style={{ color: PALETTE.textMuted }}>Swipe or hold here</p>
               )}
             </div>
-            {analysis && (
-              <div className="flex justify-between text-[10px]" style={{ color: PALETTE.textDim }}>
-                <span>Score: {(analysis.anxietyScore * 100).toFixed(0)}%</span>
-                <span className="capitalize font-semibold" style={{ color: activeColor }}>{analysis.emotionalState}</span>
-              </div>
-            )}
-          </div>
+          </EnergyBorder>
         </div>
 
         {/* ─── BOTTOM-RIGHT: Mini Report ──────────────────────────────── */}

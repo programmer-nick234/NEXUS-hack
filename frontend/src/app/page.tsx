@@ -128,6 +128,8 @@ const EnergySphere = memo(function EnergySphere({ mouse }: { mouse: React.RefObj
    UI COMPONENTS
    ═══════════════════════════════════════════════════════════════════════════ */
 
+import EnergyBorder from "@/components/ui/EnergyBorder";
+
 const CTAButton = memo(function CTAButton({ label, onClick }: { label: string; onClick: () => void }) {
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -140,20 +142,22 @@ const CTAButton = memo(function CTAButton({ label, onClick }: { label: string; o
   };
 
   return (
-    <button
-      ref={btnRef}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      onClick={onClick}
-      className="px-10 py-4 rounded-full text-sm font-bold uppercase tracking-[0.2em] transition-all duration-300 shadow-lg"
-      style={{
-        background: C.orange,
-        color: C.bg,
-        boxShadow: "0 0 15px rgba(255, 90, 31, 0.2)",
-      }}
-    >
-      {label}
-    </button>
+    <EnergyBorder thickness={3} glowIntensity={1.2}>
+      <button
+        ref={btnRef}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onClick={onClick}
+        className="px-10 py-4 rounded-full text-sm font-bold uppercase tracking-[0.2em] transition-all duration-300 shadow-lg"
+        style={{
+          background: C.orange,
+          color: C.bg,
+          boxShadow: "0 0 15px rgba(255, 90, 31, 0.2)",
+        }}
+      >
+        {label}
+      </button>
+    </EnergyBorder>
   );
 });
 
@@ -302,23 +306,25 @@ export default function HomePage() {
 
       {/* Hero Content */}
       <div className="relative z-10 flex flex-col items-center text-center px-6 max-w-4xl">
-        <div ref={headlineRef} className="will-change-transform">
-          <h1 className="text-5xl md:text-7xl font-light tracking-tight text-white leading-tight">
-            Experience Emotion <br />
-            <span className="font-bold">Through Interaction</span>
-          </h1>
-        </div>
+        <EnergyBorder className="p-8 rounded-[40px]" thickness={1.5} glowIntensity={0.8}>
+          <div ref={headlineRef} className="will-change-transform">
+            <h1 className="text-5xl md:text-7xl font-light tracking-tight text-white leading-tight">
+              Experience Emotion <br />
+              <span className="font-bold">Through Interaction</span>
+            </h1>
+          </div>
 
-        <div ref={subtextRef} className="mt-8 will-change-transform">
-          <p className="text-lg md:text-xl font-medium tracking-wide" style={{ color: C.dim }}>
-            AI-powered emotional detection meets physical UI.
-          </p>
-        </div>
+          <div ref={subtextRef} className="mt-8 will-change-transform">
+            <p className="text-lg md:text-xl font-medium tracking-wide" style={{ color: C.dim }}>
+              AI-powered emotional detection meets physical UI.
+            </p>
+          </div>
 
-        <div ref={buttonWrapRef} className="mt-12 will-change-transform flex flex-col items-center justify-center gap-3">
-          <HelperPointer onClick={() => router.push("/mood-analyze")} />
-          <CTAButton label="Get Started →" onClick={() => router.push("/mood-analyze")} />
-        </div>
+          <div ref={buttonWrapRef} className="mt-12 will-change-transform flex flex-col items-center justify-center gap-3">
+            <HelperPointer onClick={() => router.push("/mood-analyze")} />
+            <CTAButton label="Get Started →" onClick={() => router.push("/mood-analyze")} />
+          </div>
+        </EnergyBorder>
       </div>
 
       {/* Footnote Branding */}
