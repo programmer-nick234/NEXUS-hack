@@ -131,6 +131,122 @@ function BreathingOrb({ color, breathSpeed, vibrate }: { color: string; breathSp
   );
 }
 
+/**
+ * Cinematic Smoke Layer Component
+ * High-performance particle system that reacts to emotion and gestures.
+ */
+function SmokeLayer({ emotion, gestureActive, isEnding, color, gestureRef }: {
+  emotion: string;
+  gestureActive: boolean;
+  isEnding: boolean;
+  color: string;
+  gestureRef: React.MutableRefObject<any>;
+}) {
+  const pointsRef = useRef<THREE.Points>(null!);
+  const count = 2000;
+
+  // Initialize particles with random positions and velocities
+  const [positions, velocities, sizes] = useMemo(() => {
+    const p = new Float32Array(count * 3);
+    const v = new Float32Array(count * 3);
+    const s = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      p[i * 3] = (Math.random() - 0.5) * 10;
+      p[i * 3 + 1] = (Math.random() - 0.5) * 10;
+      p[i * 3 + 2] = (Math.random() - 2) * 2;
+
+      v[i * 3] = (Math.random() - 0.5) * 0.01;
+      v[i * 3 + 1] = (Math.random() - 0.5) * 0.01;
+      v[i * 3 + 2] = (Math.random() - 0.5) * 0.01;
+
+      s[i] = Math.random() * 0.5 + 0.1;
+    }
+    return [p, v, s];
+  }, []);
+
+  const targetColor = useMemo(() => new THREE.Color(color), [color]);
+
+  useFrame((state) => {
+    const t = state.clock.getElapsedTime();
+    const positionsAttr = pointsRef.current.geometry.attributes.position;
+
+    for (let i = 0; i < count; i++) {
+      const idx = i * 3;
+
+      // Default Flow: Drifting top-left to top-right
+      let tx = 0.01 + Math.sin(t * 0.5 + i) * 0.005;
+      let ty = 0.005 + Math.cos(t * 0.3 + i) * 0.005;
+
+      // 1. Gesture Reactivity: Pull toward cursor if active
+      if (gestureActive && gestureRef.current.isDown) {
+        const lastPoint = gestureRef.current.points[gestureRef.current.points.length - 1];
+        if (lastPoint) {
+          // Map screen coords to 3D space (-5 to 5 approx)
+          const targetX = (lastPoint.x / window.innerWidth) * 10 - 5;
+          const targetY = -(lastPoint.y / window.innerHeight) * 10 + 5;
+
+          tx += (targetX - positionsAttr.array[idx]) * 0.02;
+          ty += (targetY - positionsAttr.array[idx + 1]) * 0.02;
+
+          // Speed up particles
+          tx *= 2.5;
+          ty *= 2.5;
+        }
+      }
+      // 2. Emotion Behavior: Gravitate toward center orb
+      else if (emotion !== "neutral") {
+        const distToCenter = Math.sqrt(positionsAttr.array[idx] ** 2 + positionsAttr.array[idx + 1] ** 2);
+        if (distToCenter > 1.2) {
+          tx -= positionsAttr.array[idx] * 0.005;
+          ty -= positionsAttr.array[idx + 1] * 0.005;
+        } else {
+          // Orbiting/Wrapping behavior
+          tx = -positionsAttr.array[idx + 1] * 0.02;
+          ty = positionsAttr.array[idx] * 0.02;
+        }
+      }
+
+      // 3. End Session: Explode outward
+      if (isEnding) {
+        tx = positionsAttr.array[idx] * 0.05;
+        ty = positionsAttr.array[idx + 1] * 0.05;
+
+        // Fading handled by material opacity
+      }
+
+      positionsAttr.array[idx] += tx;
+      positionsAttr.array[idx + 1] += ty;
+
+      // Boundary reset
+      if (Math.abs(positionsAttr.array[idx]) > 8) positionsAttr.array[idx] *= -0.9;
+      if (Math.abs(positionsAttr.array[idx + 1]) > 6) positionsAttr.array[idx + 1] *= -0.9;
+    }
+
+    positionsAttr.needsUpdate = true;
+
+    // Smooth opacity transition for ending
+    if (isEnding) {
+      const mat = pointsRef.current.material as THREE.PointsMaterial;
+      mat.opacity = THREE.MathUtils.lerp(mat.opacity, 0, 0.05);
+      mat.size = THREE.MathUtils.lerp(mat.size, 0.5, 0.05);
+    }
+  });
+
+  return (
+    <Points ref={pointsRef} positions={positions} stride={3} frustumCulled={false}>
+      <PointMaterial
+        transparent
+        color={targetColor}
+        size={0.15}
+        sizeAttenuation
+        depthWrite={false}
+        opacity={0.15}
+        blending={THREE.AdditiveBlending}
+      />
+    </Points>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    SUB-COMPONENTS
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -204,7 +320,7 @@ export default function MoodAnalyzePage() {
   // ── Face emotion state ─────────────────────────────────────────────────
   const [faceEmotion, setFaceEmotion] = useState<string>("neutral");
   const [confidence, setConfidence] = useState(0);
-  const [faceDistribution, setFaceDistribution] = useState<Record<string,number>>({});
+  const [faceDistribution, setFaceDistribution] = useState<Record<string, number>>({});
   const [isDetecting, setIsDetecting] = useState(false);
   const [showEndModal, setShowEndModal] = useState(false);
 
@@ -432,6 +548,19 @@ export default function MoodAnalyzePage() {
 
   return (
     <main className="relative w-screen h-screen overflow-hidden select-none font-sans" style={{ background: PALETTE.bg }}>
+      {/* ── Cinematic Smoke Layer Overlay ── */}
+      <div className="absolute inset-0 z-5 pointer-events-none opacity-40">
+        <Canvas camera={{ position: [0, 0, 5], fov: 60 }}>
+          <SmokeLayer
+            emotion={faceEmotion}
+            gestureActive={gestureActive}
+            isEnding={showEndModal}
+            color={activeColor}
+            gestureRef={gesture}
+          />
+        </Canvas>
+      </div>
+
       {/* Hidden canvas used to snapshot the <video> element */}
       <canvas ref={canvasRef} className="hidden" />
 

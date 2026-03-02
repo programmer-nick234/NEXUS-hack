@@ -166,12 +166,11 @@ const HelperPointer = memo(function HelperPointer({ onClick }: { onClick: () => 
   useEffect(() => {
     if (!ref.current) return;
 
-    // Explicit "poking" animation towards the button
+    // Vertical bounce pointing directly down
     gsap.fromTo(ref.current,
-      { x: 0, y: 0 },
+      { y: 0 },
       {
-        x: 20,
-        y: 15,
+        y: 10,
         duration: 1.2,
         repeat: -1,
         yoyo: true,
@@ -206,15 +205,15 @@ const HelperPointer = memo(function HelperPointer({ onClick }: { onClick: () => 
       onClick={onClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className="absolute -top-14 -left-32 flex flex-col items-center cursor-pointer select-none z-20 group"
+      className="flex flex-col items-center cursor-pointer select-none z-20 group mb-2"
       style={{ filter: "drop-shadow(0 0 6px rgba(255, 90, 31, 0.3))" }}
     >
       <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 group-hover:text-white transition-colors">
         Click Here
       </span>
-      {/* Points directly at the CTA button center */}
-      <div className="pointer-arrow mt-2" style={{ color: C.orange, transform: "rotate(-35deg)" }}>
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      {/* Points directly down at the CTA button */}
+      <div className="pointer-arrow mt-1" style={{ color: C.orange }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M7 13l5 5 5-5M12 18V6" />
         </svg>
       </div>
@@ -316,7 +315,7 @@ export default function HomePage() {
           </p>
         </div>
 
-        <div ref={buttonWrapRef} className="mt-12 will-change-transform relative">
+        <div ref={buttonWrapRef} className="mt-12 will-change-transform flex flex-col items-center justify-center gap-3">
           <HelperPointer onClick={() => router.push("/mood-analyze")} />
           <CTAButton label="Get Started →" onClick={() => router.push("/mood-analyze")} />
         </div>
