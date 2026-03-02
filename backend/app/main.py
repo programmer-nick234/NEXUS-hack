@@ -1,5 +1,8 @@
-from contextlib import asynccontextmanager
+import os
+# Force legacy Keras for DeepFace compatibility with TF 2.16+
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -21,11 +24,17 @@ limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
 
+from app.services.emotion_service import emotion_service
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     await connect_db()
+    # Pre-load emotion models
+    emotion_service.load_models()
     yield
+    # Cleanup camera
+    emotion_service.release()
     await close_db()
     logger.info("Shutdown complete")
 

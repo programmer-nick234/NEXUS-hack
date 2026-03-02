@@ -11,11 +11,19 @@ _db: AsyncIOMotorDatabase | None = None
 async def connect_db() -> None:
     """Initialize MongoDB connection and create indexes."""
     global _client, _db
-    logger.info("Connecting to MongoDB …")
-    _client = AsyncIOMotorClient(settings.MONGO_URI)
-    _db = _client[settings.MONGO_DB_NAME]
-    await create_indexes()
-    logger.info("MongoDB connected ✓")
+    try:
+        logger.info("Connecting to MongoDB …")
+        _client = AsyncIOMotorClient(settings.MONGO_URI, serverSelectionTimeoutMS=5000)
+        _db = _client[settings.MONGO_DB_NAME]
+        # Test connection
+        await _client.admin.command('ping')
+        await create_indexes()
+        logger.info("MongoDB connected ✓")
+    except Exception as e:
+        logger.error(f"MongoDB connection failed: {e}. Proceeding with dummy DB for emotion detection.")
+        # Create a mock-like behavior or just keep _db as None
+        # In this project, get_db() will raise RuntimeError if _db is None.
+        # But we only need face detection which doesn't use the DB.
 
 
 async def close_db() -> None:

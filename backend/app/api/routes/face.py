@@ -6,11 +6,19 @@ This module provides an integration-ready structure with a dummy response.
 """
 
 from fastapi import APIRouter, File, UploadFile
-
 from app.api.deps import CurrentUser
+from app.services.emotion_service import emotion_service
 
 router = APIRouter(prefix="/face", tags=["Face Detection"])
 
+@router.get("/detect-emotion")
+async def detect_realtime_emotion():
+    """
+    Perform real-time emotion detection using the server's webcam.
+    (Alternative UI Polling Endpoint)
+    """
+    result = emotion_service.detect_emotion()
+    return result
 
 @router.post("/analyze")
 async def analyze_face(
@@ -19,15 +27,8 @@ async def analyze_face(
 ):
     """
     PLACEHOLDER – Accept an image file and return a dummy face detection response.
-
-    Integration notes:
-    ─────────────────
-    • Replace the dummy response below with a call to the OpenCV processing service.
-    • The uploaded file is available via `file.file` (SpooledTemporaryFile) or
-      `await file.read()` for raw bytes.
-    • Expected to return: facesDetected, confidence, emotion, bounding boxes, etc.
     """
-    # Validate basic content type
+    # ... existing code ...
     if file.content_type and not file.content_type.startswith("image/"):
         return {
             "success": False,
@@ -35,7 +36,6 @@ async def analyze_face(
             "message": "Uploaded file must be an image",
         }
 
-    # ── Dummy response (replace with OpenCV integration) ──────────────────
     return {
         "success": True,
         "data": {

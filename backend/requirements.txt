@@ -18,3 +18,9 @@ slowapi==0.*
 
 # ── File Upload ──────────────────────────────────────────────────────────────
 python-multipart==0.*
+
+# ── Emotion Detection ────────────────────────────────────────────────────────
+opencv-python
+deepface
+tensorflow
+tf-keras
