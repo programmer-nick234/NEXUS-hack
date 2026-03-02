@@ -5,6 +5,8 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Sphere, MeshDistortMaterial, Points, PointMaterial } from "@react-three/drei";
 import * as THREE from "three";
 import { gsap } from "gsap";
+import { useSessionStore, useGamificationStore } from "@/store";
+import Link from "next/link";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    TYPES
@@ -176,7 +178,7 @@ function captureFrame(
     canvas.toBlob(
       (blob) => resolve(blob),
       "image/jpeg",
-      0.70,                           // quality – balance speed vs detail
+      0.85,                           // quality – better detail for OpenCV
     );
   });
 }
@@ -186,10 +188,25 @@ function captureFrame(
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function MoodAnalyzePage() {
+  // ── Session & gamification stores ──────────────────────────────────────
+  const {
+    sessionId,
+    isActive: sessionActive,
+    startSession,
+    addEmotionSnapshot,
+    endSession: endSessionStore,
+    lastResult,
+    suggestion,
+    fetchSuggestion,
+    reset: resetSession,
+  } = useSessionStore();
+
   // ── Face emotion state ─────────────────────────────────────────────────
   const [faceEmotion, setFaceEmotion] = useState<string>("neutral");
   const [confidence, setConfidence] = useState(0);
+  const [faceDistribution, setFaceDistribution] = useState<Record<string,number>>({});
   const [isDetecting, setIsDetecting] = useState(false);
+  const [showEndModal, setShowEndModal] = useState(false);
 
   // ── Gesture / anxiety state ────────────────────────────────────────────
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
@@ -206,6 +223,7 @@ export default function MoodAnalyzePage() {
   const gestureZoneRef = useRef<HTMLDivElement>(null);
   const faceEmotionRef = useRef<string>("neutral");       // always-fresh for callbacks
   const faceConfRef = useRef<number>(0);
+  const sessionEndedRef = useRef(false);                  // stop detection loop
   const gesture = useRef({
     startTime: 0,
     points: [] as { x: number; y: number; t: number }[],
@@ -224,7 +242,7 @@ export default function MoodAnalyzePage() {
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
         });
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -238,12 +256,19 @@ export default function MoodAnalyzePage() {
     };
   }, []);
 
+  // ── Auto-start session on mount ────────────────────────────────────────
+  useEffect(() => {
+    startSession();
+    // Don't resetSession on unmount — let endSession handle cleanup
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Frame capture → POST /face/analyze every 2 s ──────────────────────
   useEffect(() => {
     let active = true;
 
     async function loop() {
-      while (active) {
+      while (active && !sessionEndedRef.current) {
         try {
           const video = videoRef.current;
           const canvas = canvasRef.current;
@@ -258,11 +283,21 @@ export default function MoodAnalyzePage() {
                 const data = await res.json();
                 if (data.success) {
                   const emo = (data.emotion as string).toLowerCase();
+                  const dist = data.distribution || {};
                   setFaceEmotion(emo);
                   setConfidence(data.confidence ?? 0);
+                  setFaceDistribution(dist);
                   faceEmotionRef.current = emo;
                   faceConfRef.current = data.confidence ?? 0;
                   setIsDetecting(true);
+
+                  // Push to session store
+                  addEmotionSnapshot({ emotion: emo, confidence: data.confidence ?? 0, distribution: dist });
+
+                  // Fetch AI suggestion every 6 seconds (3 frames)
+                  if (Math.random() < 0.35) {
+                    fetchSuggestion(emo, data.confidence ?? 0, analysis?.anxietyScore ?? 0);
+                  }
                 }
               } else {
                 setIsDetecting(false);
@@ -382,6 +417,19 @@ export default function MoodAnalyzePage() {
   const displayState = analysis?.emotionalState ?? faceEmotion;
   const displayEmoji = EMOJI_MAP[displayState] ?? EMOJI_MAP[faceEmotion] ?? "😐";
 
+  // ── Session end handler ────────────────────────────────────────────────
+  const handleEndSession = useCallback(async () => {
+    // Stop detection loop first so no more requests fly during end
+    sessionEndedRef.current = true;
+    const result = await endSessionStore();
+    if (result) {
+      setShowEndModal(true);
+    } else {
+      // Still show modal with local data on failure
+      setShowEndModal(true);
+    }
+  }, [endSessionStore]);
+
   return (
     <main className="relative w-screen h-screen overflow-hidden select-none font-sans" style={{ background: PALETTE.bg }}>
       {/* Hidden canvas used to snapshot the <video> element */}
@@ -391,13 +439,13 @@ export default function MoodAnalyzePage() {
       <div className="absolute inset-0 pointer-events-none transition-colors duration-700 opacity-10" style={{ backgroundColor: activeColor }} />
 
       {/* ═══════ GRID ═════════════════════════════════════════════════════ */}
-      <div className="relative z-10 grid grid-cols-[320px_1fr_340px] grid-rows-[1fr_1fr] h-full gap-0">
+      <div className="relative z-10 grid grid-cols-[440px_1fr_340px] grid-rows-[1fr_1fr] h-full gap-0">
 
         {/* ─── TOP-LEFT: Webcam Preview ───────────────────────────────── */}
         <div className="p-5 flex flex-col gap-3">
           <p className="text-[10px] font-bold tracking-[0.25em] uppercase" style={{ color: PALETTE.textMuted }}>OpenCV Detection</p>
           <div className="relative rounded-2xl overflow-hidden border" style={{ borderColor: PALETTE.border, background: "#000" }}>
-            <video ref={videoRef} autoPlay muted playsInline className="w-full aspect-video object-cover opacity-70" />
+            <video ref={videoRef} autoPlay muted playsInline className="w-full aspect-[4/3] object-cover" />
             {/* Live badge */}
             <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider" style={{ background: "rgba(0,0,0,0.6)", color: isDetecting ? PALETTE.green : PALETTE.red }}>
               <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: isDetecting ? PALETTE.green : PALETTE.red }} />
@@ -411,14 +459,17 @@ export default function MoodAnalyzePage() {
           </div>
           {/* Emotion breakdown bars */}
           <div className="space-y-1.5 mt-1">
-            {(["happy", "sad", "angry", "neutral", "surprised", "fear", "disgust"] as const).map((e) => (
-              <div key={e} className="flex items-center gap-2">
-                <span className="text-[9px] uppercase w-16 text-right font-medium" style={{ color: PALETTE.textMuted }}>{e}</span>
-                <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: PALETTE.surfaceLight }}>
-                  <div className="h-full rounded-full transition-all duration-500" style={{ width: faceEmotion === e ? `${Math.max(confidence * 100, 20)}%` : "5%", background: EMOTION_COLORS[e] }} />
+            {(["happy", "sad", "angry", "neutral", "surprised", "fear", "disgust"] as const).map((e) => {
+              const pct = faceDistribution[e] ? faceDistribution[e] * 100 : (faceEmotion === e ? Math.max(confidence * 100, 20) : 5);
+              return (
+                <div key={e} className="flex items-center gap-2">
+                  <span className="text-[9px] uppercase w-16 text-right font-medium" style={{ color: PALETTE.textMuted }}>{e}</span>
+                  <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: PALETTE.surfaceLight }}>
+                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: EMOTION_COLORS[e] }} />
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -454,8 +505,17 @@ export default function MoodAnalyzePage() {
         </div>
 
         {/* ─── TOP-RIGHT: Emotion Visualization ───────────────────────── */}
-        <div className="p-5 flex flex-col gap-3">
-          <p className="text-[10px] font-bold tracking-[0.25em] uppercase" style={{ color: PALETTE.textMuted }}>Emotional Output</p>
+        <div className="p-5 flex flex-col gap-3 overflow-y-auto">
+          <div className="flex justify-between items-center">
+            <p className="text-[10px] font-bold tracking-[0.25em] uppercase" style={{ color: PALETTE.textMuted }}>Emotional Output</p>
+            <button
+              onClick={handleEndSession}
+              className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg border transition-colors hover:bg-red-500/20"
+              style={{ borderColor: PALETTE.red, color: PALETTE.red }}
+            >
+              End Session
+            </button>
+          </div>
 
           <div className="rounded-2xl p-4 flex flex-col items-center gap-3" style={{ background: PALETTE.surface, border: `1px solid ${PALETTE.border}` }}>
             <div className="text-6xl">{displayEmoji}</div>
@@ -475,6 +535,28 @@ export default function MoodAnalyzePage() {
                 <span>Breath: {analysis.parameters.breathSpeed}s</span>
                 <span>Particles: {analysis.parameters.particleSpeed}</span>
               </div>
+            </div>
+          )}
+
+          {/* AI Suggestion card */}
+          {suggestion && suggestion.suggestions.length > 0 && (
+            <div className="rounded-2xl p-4 space-y-2" style={{ background: PALETTE.surface, border: `1px solid ${PALETTE.border}` }}>
+              <p className="text-[10px] font-bold tracking-[0.2em] uppercase" style={{ color: PALETTE.textMuted }}>AI Suggestion</p>
+              <p className="text-xs" style={{ color: PALETTE.textDim }}>{suggestion.message}</p>
+              <div className="space-y-1.5">
+                {suggestion.suggestions.slice(0, 2).map((s) => (
+                  <div key={s.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5" style={{ background: PALETTE.surfaceLight }}>
+                    <span className="text-lg">{s.icon}</span>
+                    <div>
+                      <p className="text-[11px] font-medium" style={{ color: PALETTE.text }}>{s.name}</p>
+                      <p className="text-[9px]" style={{ color: PALETTE.textMuted }}>{s.category} · {s.duration_sec}s</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {suggestion.pattern.insight && (
+                <p className="text-[10px] italic pt-1" style={{ color: PALETTE.accent }}>{suggestion.pattern.insight}</p>
+              )}
             </div>
           )}
         </div>
@@ -555,6 +637,87 @@ export default function MoodAnalyzePage() {
       <div className="absolute bottom-2 right-5 text-[8px] font-mono z-30" style={{ color: PALETTE.textMuted + "40" }}>
         WILDCARD_2 // NO_INPUT_PROTOCOL
       </div>
+
+      {/* ═══ Session End Modal ═════════════════════════════════════════════ */}
+      {showEndModal && lastResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="rounded-3xl p-8 max-w-md w-full space-y-5" style={{ background: PALETTE.surface, border: `1px solid ${PALETTE.border}` }}>
+            <h2 className="text-2xl font-bold text-center" style={{ color: PALETTE.text }}>Session Complete!</h2>
+
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <p className="text-2xl font-bold" style={{ color: PALETTE.green }}>{lastResult.moodScore ?? 0}</p>
+                <p className="text-[10px]" style={{ color: PALETTE.textMuted }}>Mood Score</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold" style={{ color: PALETTE.purple }}>{lastResult.stabilityIndex ?? 0}</p>
+                <p className="text-[10px]" style={{ color: PALETTE.textMuted }}>Stability</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold" style={{ color: PALETTE.blue }}>{Math.round((lastResult.durationSec || 0) / 60)}m</p>
+                <p className="text-[10px]" style={{ color: PALETTE.textMuted }}>Duration</p>
+              </div>
+            </div>
+
+            {/* XP gain */}
+            {lastResult.sessionXp && (
+              <div className="text-center">
+                <p className="text-lg font-bold" style={{ color: PALETTE.accent }}>+{lastResult.sessionXp} XP</p>
+                {lastResult.level && (
+                  <p className="text-xs" style={{ color: PALETTE.textDim }}>Level {lastResult.level}</p>
+                )}
+                {lastResult.levelProgress && (
+                  <div className="mt-2 h-2 rounded-full overflow-hidden" style={{ background: PALETTE.surfaceLight }}>
+                    <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all" style={{ width: `${lastResult.levelProgress.percent}%` }} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* New badges */}
+            {lastResult.newBadges && lastResult.newBadges.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-center" style={{ color: PALETTE.yellow }}>New Badge{lastResult.newBadges.length > 1 ? "s" : ""}!</p>
+                <div className="flex justify-center gap-3">
+                  {lastResult.newBadges.map((b: any) => (
+                    <div key={b.id} className="text-center">
+                      <span className="text-3xl">{b.icon}</span>
+                      <p className="text-[10px] font-medium" style={{ color: PALETTE.text }}>{b.name}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Dominant emotion */}
+            <div className="text-center">
+              <span className="text-4xl">{EMOJI_MAP[lastResult.dominantEmotion || "neutral"] || "😐"}</span>
+              <p className="text-sm capitalize font-medium mt-1" style={{ color: PALETTE.text }}>
+                Dominant: {lastResult.dominantEmotion || "neutral"}
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowEndModal(false); resetSession(); startSession(); }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors"
+                style={{ background: PALETTE.accent, color: "#fff" }}
+              >
+                New Session
+              </button>
+              <Link
+                href="/session-results"
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-center transition-colors border"
+                style={{ borderColor: PALETTE.border, color: PALETTE.text }}
+              >
+                View Analytics
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

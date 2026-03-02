@@ -25,6 +25,18 @@ export default function DashboardLayout({
               Overview
             </Link>
             <Link
+              href="/dashboard/analytics"
+              className="block rounded-lg px-4 py-2 text-sm text-gray-300 hover:bg-white/10 transition-colors"
+            >
+              Analytics
+            </Link>
+            <Link
+              href="/mood-analyze"
+              className="block rounded-lg px-4 py-2 text-sm text-indigo-400 hover:bg-white/10 transition-colors"
+            >
+              Mood Session
+            </Link>
+            <Link
               href="/dashboard/profile"
               className="block rounded-lg px-4 py-2 text-sm text-gray-300 hover:bg-white/10 transition-colors"
             >

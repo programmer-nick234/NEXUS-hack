@@ -1,33 +1,88 @@
 """
-Emotion detection service — OpenCV-only (no TensorFlow required).
-Uses Haar cascades for face / eye / smile detection and a multi-feature
-heuristic for emotion classification.
-DeepFace is used when available; otherwise falls back to OpenCV-only.
+Emotion detection service — production-grade OpenCV pipeline.
+=============================================================
+Multi-cascade face/eye/smile detection + EMA smoothing +
+confidence calibration + all-emotion probability distribution.
+
+DeepFace used when available; OpenCV-only fallback for Python 3.14.
 """
 
 import cv2
 import numpy as np
 import threading
+import time
+from collections import deque
 from app.core.logging import logger
 
-# Try to import DeepFace (requires TensorFlow which needs Python <3.14)
+# ── optional deep-learning backend ────────────────────────────────────────────
 try:
     from deepface import DeepFace
+
     HAS_DEEPFACE = True
-    logger.info("DeepFace available — using deep learning emotion detection")
+    logger.info("DeepFace available — deep learning emotion detection active")
 except ImportError:
     HAS_DEEPFACE = False
-    logger.warning("DeepFace not available (Python 3.14?) — using OpenCV-only fallback")
+    logger.warning("DeepFace unavailable — using OpenCV-only fallback")
+
+# ── emotion constants ─────────────────────────────────────────────────────────
+ALL_EMOTIONS = ("happy", "sad", "angry", "surprised", "fear", "neutral", "disgust")
+
+
+class EmotionSmoother:
+    """
+    Exponential-moving-average smoother with hysteresis.
+    Prevents flickering between emotions on consecutive frames.
+    """
+
+    def __init__(self, alpha: float = 0.35, history_len: int = 8, switch_threshold: float = 0.15):
+        self._alpha = alpha
+        self._probs: dict[str, float] = {e: 0.0 for e in ALL_EMOTIONS}
+        self._probs["neutral"] = 1.0
+        self._current = "neutral"
+        self._history: deque[str] = deque(maxlen=history_len)
+        self._switch_threshold = switch_threshold
+
+    def update(self, raw_scores: dict[str, float]) -> dict:
+        """Feed a new frame's raw scores and get smoothed result."""
+        total = sum(raw_scores.values()) or 1.0
+        normed = {e: raw_scores.get(e, 0.0) / total for e in ALL_EMOTIONS}
+
+        for e in ALL_EMOTIONS:
+            self._probs[e] = self._alpha * normed[e] + (1 - self._alpha) * self._probs[e]
+
+        ptotal = sum(self._probs.values()) or 1.0
+        for e in ALL_EMOTIONS:
+            self._probs[e] /= ptotal
+
+        best = max(self._probs, key=lambda k: self._probs[k])
+        if self._probs[best] > self._probs[self._current] + self._switch_threshold:
+            self._current = best
+
+        self._history.append(self._current)
+
+        return {
+            "emotion": self._current,
+            "confidence": round(self._probs[self._current], 3),
+            "distribution": {e: round(v, 3) for e, v in self._probs.items()},
+        }
+
+    def reset(self):
+        self._probs = {e: 0.0 for e in ALL_EMOTIONS}
+        self._probs["neutral"] = 1.0
+        self._current = "neutral"
+        self._history.clear()
 
 
 class EmotionService:
+    """Singleton emotion analyser — thread-safe."""
+
     _instance = None
     _lock = threading.Lock()
 
     def __new__(cls):
         with cls._lock:
             if cls._instance is None:
-                cls._instance = super(EmotionService, cls).__new__(cls)
+                cls._instance = super().__new__(cls)
                 cls._instance._initialized = False
             return cls._instance
 
@@ -35,236 +90,226 @@ class EmotionService:
         if self._initialized:
             return
         self.cap = None
-        self.frame_scale = 0.5
+        self.frame_scale = 0.75          # process at 75% to keep good detail
 
-        # Load multiple Haar cascades for richer feature extraction
         cascade_dir = cv2.data.haarcascades
-        self.face_cascade = cv2.CascadeClassifier(
-            cascade_dir + "haarcascade_frontalface_default.xml"
-        )
-        self.eye_cascade = cv2.CascadeClassifier(
-            cascade_dir + "haarcascade_eye.xml"
-        )
-        self.smile_cascade = cv2.CascadeClassifier(
-            cascade_dir + "haarcascade_smile.xml"
-        )
+        self.face_cascade = cv2.CascadeClassifier(cascade_dir + "haarcascade_frontalface_default.xml")
+        self.face_alt_cascade = cv2.CascadeClassifier(cascade_dir + "haarcascade_frontalface_alt2.xml")
+        self.eye_cascade = cv2.CascadeClassifier(cascade_dir + "haarcascade_eye.xml")
+        self.smile_cascade = cv2.CascadeClassifier(cascade_dir + "haarcascade_smile.xml")
+        self.profile_cascade = cv2.CascadeClassifier(cascade_dir + "haarcascade_profileface.xml")
 
-        # Smoothing buffer — keeps last N results for temporal stability
-        self._history: list[str] = []
-        self._history_max = 5
+        self.smoother = EmotionSmoother()
+        self._frame_count = 0
+        self._last_ts = time.time()
 
         self._initialized = True
-        logger.info("EmotionService initialized (multi-cascade)")
-
-    # ── internal helpers ──────────────────────────────────────────────────
-
-    def _smooth_emotion(self, raw_emotion: str) -> str:
-        """Return the most common emotion over the last N frames."""
-        self._history.append(raw_emotion)
-        if len(self._history) > self._history_max:
-            self._history = self._history[-self._history_max:]
-        from collections import Counter
-        return Counter(self._history).most_common(1)[0][0]
-
-    # ── public API ────────────────────────────────────────────────────────
+        logger.info("EmotionService initialised (multi-cascade + EMA smoother)")
 
     def load_models(self):
-        """Pre-load models to avoid runtime initialisation errors."""
         if HAS_DEEPFACE:
             try:
-                logger.info("Pre-loading DeepFace models…")
-                dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
+                logger.info("Pre-loading DeepFace models …")
                 DeepFace.analyze(
-                    img_path=dummy_img,
-                    actions=["emotion"],
-                    enforce_detection=False,
-                    detector_backend="opencv",
-                    silent=True,
+                    img_path=np.zeros((100, 100, 3), dtype=np.uint8),
+                    actions=["emotion"], enforce_detection=False,
+                    detector_backend="opencv", silent=True,
                 )
-                logger.info("DeepFace models loaded successfully")
+                logger.info("DeepFace models ready")
             except Exception as e:
-                logger.error(f"Failed to pre-load DeepFace models: {e}")
+                logger.error(f"DeepFace pre-load failed: {e}")
         else:
-            logger.info("Using OpenCV-only fallback — no models to pre-load")
+            logger.info("OpenCV-only — no models to pre-load")
 
-    # ── OpenCV multi-cascade fallback ─────────────────────────────────────
+    # ── OpenCV multi-cascade pipeline ─────────────────────────────────────
 
-    def _opencv_fallback_emotion(self, frame: np.ndarray) -> dict:
-        """
-        Multi-feature emotion estimation:
-         1. Detect face → crop ROI
-         2. Detect eyes (count, openness ratio)
-         3. Detect smile (presence, width)
-         4. Compute brightness / contrast of face ROI
-         5. Combine features into a rule score for each emotion
-        """
+    def _extract_features(self, frame: np.ndarray) -> dict | None:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        # histogram equalisation for better feature detection
-        gray = cv2.equalizeHist(gray)
+        # Apply CLAHE for better local contrast (works much better than equalizeHist)
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+        gray = clahe.apply(gray)
 
+        # Try primary cascade first, then fall back to alt2 cascade
         faces = self.face_cascade.detectMultiScale(
-            gray, scaleFactor=1.1, minNeighbors=6, minSize=(60, 60)
+            gray, scaleFactor=1.05, minNeighbors=4, minSize=(40, 40),
+            flags=cv2.CASCADE_SCALE_IMAGE,
         )
-
         if len(faces) == 0:
-            return {"success": True, "emotion": self._smooth_emotion("neutral"), "confidence": 0.3}
+            faces = self.face_alt_cascade.detectMultiScale(
+                gray, scaleFactor=1.05, minNeighbors=3, minSize=(40, 40),
+                flags=cv2.CASCADE_SCALE_IMAGE,
+            )
+        if len(faces) == 0:
+            # Try profile face as last resort
+            faces = self.profile_cascade.detectMultiScale(
+                gray, scaleFactor=1.1, minNeighbors=3, minSize=(40, 40),
+            )
+        if len(faces) == 0:
+            return None
 
-        # take the largest face
         x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
-        face_gray = gray[y: y + h, x: x + w]
-        face_bgr = frame[y: y + h, x: x + w]
+        face = gray[y: y + h, x: x + w]
 
-        # ── feature: eyes ────────────────────────────────────────────────
-        upper_half = face_gray[0: h // 2, :]
-        eyes = self.eye_cascade.detectMultiScale(
-            upper_half, scaleFactor=1.05, minNeighbors=4, minSize=(20, 20)
-        )
+        # Eyes — scan upper 55% of face (forehead + eyes)
+        upper = face[0: int(h * 0.55), :]
+        eyes = self.eye_cascade.detectMultiScale(upper, 1.05, 3, minSize=(15, 15))
         n_eyes = min(len(eyes), 2)
-
-        # average eye-openness (height/width ratio of eye bounding box)
         eye_openness = 0.0
         if n_eyes > 0:
             ratios = [eh / ew for (_, _, ew, eh) in eyes[:2] if ew > 0]
             eye_openness = sum(ratios) / len(ratios) if ratios else 0
 
-        # ── feature: smile ───────────────────────────────────────────────
-        lower_half = face_gray[h // 2:, :]
-        smiles = self.smile_cascade.detectMultiScale(
-            lower_half, scaleFactor=1.7, minNeighbors=20, minSize=(25, 15)
-        )
+        # Smile — scan lower 50% of face
+        lower = face[h // 2:, :]
+        smiles = self.smile_cascade.detectMultiScale(lower, 1.5, 15, minSize=(20, 10))
         has_smile = len(smiles) > 0
-        smile_width_ratio = 0.0
+        smile_ratio = 0.0
         if has_smile:
-            sx, sy, sw, sh = max(smiles, key=lambda s: s[2] * s[3])
-            smile_width_ratio = sw / w  # relative to face width
+            sw = max(smiles, key=lambda s: s[2] * s[3])[2]
+            smile_ratio = sw / w
 
-        # ── feature: brightness / contrast ───────────────────────────────
-        mean_val = float(np.mean(face_gray))
-        std_val = float(np.std(face_gray))
+        # Mouth region analysis for more emotion cues
+        mouth_region = face[int(h * 0.6):, :]
+        mouth_mean = float(np.mean(mouth_region)) if mouth_region.size > 0 else 0
+        mouth_std = float(np.std(mouth_region)) if mouth_region.size > 0 else 0
 
-        # ── feature: face aspect ratio (furrowed brow → taller) ─────────
-        face_ar = h / w if w > 0 else 1.0
+        # Brow region for furrowing detection
+        brow_region = face[int(h * 0.15): int(h * 0.35), :]
+        brow_std = float(np.std(brow_region)) if brow_region.size > 0 else 0
 
-        # ── scoring ──────────────────────────────────────────────────────
-        scores: dict[str, float] = {
-            "happy": 0, "sad": 0, "angry": 0,
-            "surprised": 0, "fear": 0, "neutral": 0, "disgust": 0,
+        mean_val = float(np.mean(face))
+        std_val = float(np.std(face))
+        face_ar = h / w if w else 1.0
+
+        return {
+            "n_eyes": n_eyes, "eye_openness": eye_openness,
+            "has_smile": has_smile, "smile_ratio": smile_ratio,
+            "mean": mean_val, "std": std_val, "face_ar": face_ar,
+            "mouth_mean": mouth_mean, "mouth_std": mouth_std,
+            "brow_std": brow_std,
+            "face_rect": (int(x), int(y), int(w), int(h)),
         }
 
-        # smile presence → happy
-        if has_smile:
-            scores["happy"] += 0.45 + smile_width_ratio * 0.3
+    def _score_emotions(self, ft: dict) -> dict[str, float]:
+        s: dict[str, float] = {e: 0.0 for e in ALL_EMOTIONS}
+
+        # ── Smile → happy ────────────────────────────────────────────
+        if ft["has_smile"]:
+            s["happy"] += 0.55 + ft["smile_ratio"] * 0.40
         else:
-            scores["sad"] += 0.10
-            scores["angry"] += 0.08
+            s["sad"] += 0.06
+            s["angry"] += 0.04
 
-        # wide-open eyes → surprised or fear
-        if eye_openness > 0.55:
-            scores["surprised"] += 0.35
-            scores["fear"] += 0.20
-        elif eye_openness < 0.25 and n_eyes >= 1:
-            scores["angry"] += 0.20
-            scores["disgust"] += 0.10
+        # ── Eyes → surprised / fear / angry ──────────────────────────
+        if ft["eye_openness"] > 0.50:
+            s["surprised"] += 0.40
+            s["fear"] += 0.20
+        elif ft["eye_openness"] < 0.28 and ft["n_eyes"] >= 1:
+            s["angry"] += 0.25
+            s["disgust"] += 0.15
 
-        # high contrast → more expressive
-        if std_val > 55:
-            scores["surprised"] += 0.15
-            scores["angry"] += 0.10
-        elif std_val < 28:
-            scores["sad"] += 0.15
-            scores["fear"] += 0.10
+        # ── Brow furrowing → angry / disgust ─────────────────────────
+        brow_std = ft.get("brow_std", 0)
+        if brow_std > 45:
+            s["angry"] += 0.18
+            s["disgust"] += 0.10
+        elif brow_std > 30:
+            s["sad"] += 0.10
+            s["fear"] += 0.08
 
-        # low brightness → negative valence
-        if mean_val < 90:
-            scores["sad"] += 0.15
-            scores["fear"] += 0.10
-        elif mean_val > 170:
-            scores["happy"] += 0.10
+        # ── Mouth activity → sad / fear ──────────────────────────────
+        mouth_std = ft.get("mouth_std", 0)
+        mouth_mean = ft.get("mouth_mean", 0)
+        if mouth_std > 50 and not ft["has_smile"]:
+            s["sad"] += 0.15
+            s["fear"] += 0.10
+        if mouth_mean < 80 and not ft["has_smile"]:
+            s["sad"] += 0.10
 
-        # taller face AR → furrowed/tense
-        if face_ar > 1.35:
-            scores["angry"] += 0.12
-            scores["fear"] += 0.08
+        # ── Overall face contrast ────────────────────────────────────
+        if ft["std"] > 55:
+            s["surprised"] += 0.10
+            s["angry"] += 0.06
+        elif ft["std"] < 28:
+            s["sad"] += 0.12
+            s["fear"] += 0.08
 
-        # baseline neutral
-        scores["neutral"] += 0.30
+        # ── Overall brightness ───────────────────────────────────────
+        if ft["mean"] < 90:
+            s["sad"] += 0.10
+            s["fear"] += 0.06
+        elif ft["mean"] > 170:
+            s["happy"] += 0.06
 
-        # pick winner
-        raw_emotion = max(scores, key=lambda k: scores[k])
-        max_score = scores[raw_emotion]
-        total = sum(scores.values()) or 1.0
-        raw_conf = max_score / total
+        # ── Face aspect ratio ────────────────────────────────────────
+        if ft["face_ar"] > 1.35:
+            s["angry"] += 0.08
+            s["fear"] += 0.05
 
-        # temporal smoothing
-        smoothed = self._smooth_emotion(raw_emotion)
-        conf = round(min(raw_conf + 0.10, 0.95), 2)  # small confidence boost
+        # ── Neutral baseline (lower to allow emotions to dominate) ───
+        s["neutral"] += 0.18
+        return s
 
-        return {"success": True, "emotion": smoothed, "confidence": conf}
-
-    # ── DeepFace helper ───────────────────────────────────────────────────
+    def _opencv_analyze(self, frame: np.ndarray) -> dict:
+        ft = self._extract_features(frame)
+        if ft is None:
+            return self.smoother.update({"neutral": 1.0})
+        raw = self._score_emotions(ft)
+        result = self.smoother.update(raw)
+        result["faceRect"] = ft["face_rect"]
+        return result
 
     def _deepface_analyze(self, frame: np.ndarray) -> dict | None:
         if not HAS_DEEPFACE:
             return None
         try:
             results = DeepFace.analyze(
-                img_path=frame,
-                actions=["emotion"],
-                enforce_detection=False,
-                detector_backend="opencv",
-                silent=True,
+                img_path=frame, actions=["emotion"],
+                enforce_detection=False, detector_backend="opencv", silent=True,
             )
-            result = results[0] if isinstance(results, list) else results
-            dominant = result.get("dominant_emotion", "neutral")
-            conf = result.get("emotion", {}).get(dominant, 0.0)
-            return {
-                "success": True,
-                "emotion": dominant,
-                "confidence": round(conf / 100.0, 2),
-            }
+            r = results[0] if isinstance(results, list) else results
+            raw_scores = {k.lower(): v / 100.0 for k, v in r.get("emotion", {}).items()}
+            return self.smoother.update(raw_scores)
         except Exception as e:
             logger.error(f"DeepFace error: {e}")
             return None
 
-    # ── public: detect from uploaded image bytes ──────────────────────────
+    # ── public API ────────────────────────────────────────────────────────
 
     def detect_emotion_from_image(self, image_bytes: bytes) -> dict:
-        """Detect emotion from an uploaded image (bytes)."""
         nparr = np.frombuffer(image_bytes, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if frame is None:
-            return {"success": False, "emotion": "neutral", "confidence": 0, "message": "Could not decode image"}
+            return {"success": False, "emotion": "neutral", "confidence": 0, "distribution": {}}
 
+        # Scale down large images for perf while keeping good detail
+        h, w = frame.shape[:2]
+        if max(h, w) > 800:
+            scale = 800 / max(h, w)
+            frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+
+        self._frame_count += 1
         deep = self._deepface_analyze(frame)
-        if deep:
-            return deep
-
-        return self._opencv_fallback_emotion(frame)
-
-    # ── public: detect from server webcam (kept for backward compat) ──────
+        result = deep if deep else self._opencv_analyze(frame)
+        result["success"] = True
+        result["frameIndex"] = self._frame_count
+        return result
 
     def detect_emotion(self):
-        """Capture one frame from the server webcam and detect emotion."""
         with self._lock:
             cap = self._get_cap()
             if cap is None:
                 return {"success": False, "message": "Camera not available"}
-
             ret, frame = cap.read()
             if not ret:
-                logger.warning("Failed to grab frame")
                 return {"success": False, "message": "Failed to grab frame"}
-
             frame = cv2.flip(frame, 1)
             h, w = frame.shape[:2]
-            small = cv2.resize(
-                frame, (int(w * self.frame_scale), int(h * self.frame_scale))
-            )
-
+            small = cv2.resize(frame, (int(w * self.frame_scale), int(h * self.frame_scale)))
             deep = self._deepface_analyze(small)
-            if deep:
-                return deep
-            return self._opencv_fallback_emotion(small)
+            result = deep if deep else self._opencv_analyze(small)
+            result["success"] = True
+            return result
 
     def _get_cap(self):
         if self.cap is None or not self.cap.isOpened():
@@ -279,7 +324,8 @@ class EmotionService:
             if self.cap is not None:
                 self.cap.release()
                 self.cap = None
-                logger.info("Webcam released")
+            self.smoother.reset()
+            logger.info("EmotionService released")
 
 
 emotion_service = EmotionService()

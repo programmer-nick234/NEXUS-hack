@@ -65,4 +65,28 @@ async def create_indexes() -> None:
     )
     await users.create_index("created_at", background=True)
 
+    # Sessions collection
+    sessions = db["sessions"]
+    await sessions.create_index("userId", background=True)
+    await sessions.create_index("endedAt", background=True)
+    await sessions.create_index(
+        [("userId", 1), ("endedAt", -1)],
+        background=True,
+        name="user_sessions_recent",
+    )
+
+    # User stats collection (gamification)
+    user_stats = db["user_stats"]
+    await user_stats.create_index("userId", unique=True, background=True)
+
+    # User badges collection
+    user_badges = db["user_badges"]
+    await user_badges.create_index("userId", background=True)
+    await user_badges.create_index(
+        [("userId", 1), ("badgeId", 1)],
+        unique=True,
+        background=True,
+        name="user_badge_unique",
+    )
+
     logger.info("MongoDB indexes created ✓")

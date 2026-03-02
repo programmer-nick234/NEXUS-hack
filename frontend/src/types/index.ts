@@ -130,3 +130,122 @@ export interface StateAnalysisResult {
   interventionType: string;
   parameters: InterventionParameters;
 }
+
+// ─── Session Types ───────────────────────────────────────────────────────────
+
+export interface EmotionSnapshot {
+  ts: string;
+  emotion: string;
+  confidence: number;
+  distribution: Record<string, number>;
+}
+
+export interface MoodSession {
+  _id: string;
+  sessionId?: string;
+  userId: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  timeline: EmotionSnapshot[];
+  moodScore: number | null;
+  stabilityIndex: number | null;
+  dominantEmotion: string | null;
+  durationSec: number;
+}
+
+export interface SessionEndResult {
+  sessionId: string;
+  moodScore: number | null;
+  stabilityIndex: number | null;
+  dominantEmotion: string | null;
+  durationSec: number;
+  totalSnapshots: number;
+  xp?: number;
+  level?: number;
+  sessionXp?: number;
+  newBadges?: Badge[];
+  levelProgress?: LevelProgress;
+}
+
+// ─── Gamification Types ──────────────────────────────────────────────────────
+
+export interface Badge {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  xp: number;
+  earned?: boolean;
+  earnedAt?: string;
+}
+
+export interface LevelProgress {
+  current: number;
+  required: number;
+  percent: number;
+}
+
+export interface GamificationStats {
+  userId?: string;
+  xp: number;
+  level: number;
+  currentStreak: number;
+  longestStreak: number;
+  totalSessions: number;
+  lastSessionDate: string | null;
+  levelProgress: LevelProgress;
+}
+
+// ─── Suggestion Types ────────────────────────────────────────────────────────
+
+export interface Intervention {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  duration_sec: number;
+  icon: string;
+  animation: string;
+}
+
+export interface EmotionPattern {
+  pattern: string;
+  dominant?: string;
+  insight: string;
+}
+
+export interface SuggestionResult {
+  suggestions: Intervention[];
+  pattern: EmotionPattern;
+  urgency: "low" | "medium" | "high";
+  message: string;
+}
+
+// ─── Analytics Types ─────────────────────────────────────────────────────────
+
+export interface MoodTrendPoint {
+  date: string;
+  moodScore: number;
+  stability: number;
+}
+
+export interface AnalyticsOverview {
+  totalSessions: number;
+  avgMoodScore: number;
+  avgStability: number;
+  totalMinutes: number;
+  moodTrend: MoodTrendPoint[];
+  emotionBreakdown: Record<string, number>;
+}
+
+// ─── WebSocket Types ─────────────────────────────────────────────────────────
+
+export interface WSEmotionPayload {
+  type: "emotion";
+  frame: number;
+  emotion: string;
+  confidence: number;
+  distribution: Record<string, number>;
+  faceRect?: [number, number, number, number];
+  suggestion?: SuggestionResult;
+}

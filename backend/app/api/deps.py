@@ -46,6 +46,17 @@ async def get_current_user(request: Request) -> dict:
 CurrentUser = Annotated[dict, Depends(get_current_user)]
 
 
+async def get_optional_user(request: Request) -> dict | None:
+    """Like get_current_user but returns None instead of raising 401."""
+    try:
+        return await get_current_user(request)
+    except HTTPException:
+        return None
+
+
+OptionalUser = Annotated[dict | None, Depends(get_optional_user)]
+
+
 class RoleChecker:
     """Dependency that verifies the current user has one of the required roles."""
 
