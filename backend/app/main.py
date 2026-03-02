@@ -13,7 +13,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import get_settings
 from app.core.logging import logger
 from app.db import connect_db, close_db
-from app.api.routes import auth, users, face, state
+from app.api.routes import auth, users, face, state, anxiety
 
 settings = get_settings()
 
@@ -84,6 +84,7 @@ app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(users.router, prefix=settings.API_V1_PREFIX)
 app.include_router(face.router, prefix=settings.API_V1_PREFIX)
 app.include_router(state.router, prefix=settings.API_V1_PREFIX)
+app.include_router(anxiety.router, prefix=settings.API_V1_PREFIX)
 
 
 # ── Health Check ──────────────────────────────────────────────────────────────
