@@ -481,6 +481,13 @@ export default function SessionResultsPage() {
           </div>
           <div className="flex gap-3">
             <Link
+              href="/relief"
+              className="px-5 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-105"
+              style={{ background: `linear-gradient(135deg, ${PALETTE.green}, ${PALETTE.cyan})`, color: "#fff" }}
+            >
+              🌿 Start Relief
+            </Link>
+            <Link
               href="/mood-analyze"
               className="px-5 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-105"
               style={{ background: PALETTE.accent, color: "#fff" }}
@@ -850,6 +857,13 @@ export default function SessionResultsPage() {
 
         {/* ═══ FOOTER ═════════════════════════════════════════════════════ */}
         <div className="flex justify-center gap-4 pb-8">
+          <Link
+            href="/relief"
+            className="px-6 py-3 rounded-xl text-sm font-bold transition-all hover:scale-105"
+            style={{ background: `linear-gradient(135deg, ${PALETTE.green}, ${PALETTE.cyan})`, color: "#fff" }}
+          >
+            🌿 Start Relief Journey
+          </Link>
           <Link
             href="/mood-analyze"
             className="px-6 py-3 rounded-xl text-sm font-bold transition-all hover:scale-105"

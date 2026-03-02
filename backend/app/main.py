@@ -13,7 +13,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import get_settings
 from app.core.logging import logger
 from app.db import connect_db, close_db
-from app.api.routes import auth, users, face, state, anxiety, sessions, gamification, suggestions, analytics, ws
+from app.api.routes import auth, users, face, state, anxiety, sessions, gamification, suggestions, analytics, ws, gestures, relief
 
 settings = get_settings()
 
@@ -24,17 +24,18 @@ limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
 
-from app.services.emotion_service import emotion_service
+from app.services.advanced_emotion_engine import advanced_emotion_engine
+from app.services.gesture_engine import gesture_engine
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     await connect_db()
-    # Pre-load emotion models
-    emotion_service.load_models()
+    # Pre-load advanced emotion & gesture engines
+    advanced_emotion_engine.load_models()
+    logger.info("Advanced emotion engine loaded")
+    logger.info("Gesture engine ready")
     yield
-    # Cleanup camera
-    emotion_service.release()
     await close_db()
     logger.info("Shutdown complete")
 
@@ -89,6 +90,8 @@ app.include_router(sessions.router, prefix=settings.API_V1_PREFIX)
 app.include_router(gamification.router, prefix=settings.API_V1_PREFIX)
 app.include_router(suggestions.router, prefix=settings.API_V1_PREFIX)
 app.include_router(analytics.router, prefix=settings.API_V1_PREFIX)
+app.include_router(gestures.router, prefix=settings.API_V1_PREFIX)
+app.include_router(relief.router, prefix=settings.API_V1_PREFIX)
 app.include_router(ws.router)
 
 
