@@ -80,4 +80,4 @@ class AuthService:
             is_active=user["is_active"],
             created_at=user["created_at"],
             updated_at=user["updated_at"],
-        ).model_dump()
+        ).model_dump(by_alias=True)

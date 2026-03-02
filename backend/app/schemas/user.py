@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, Literal
+from typing import Annotated, Optional, Literal
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -8,9 +8,11 @@ from pydantic import BaseModel, EmailStr, Field
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=8)
-    full_name: str = Field(..., min_length=2, max_length=100)
+    password: Annotated[str, Field(min_length=8)]
+    full_name: Annotated[str, Field(min_length=2, max_length=100, alias="fullName")]
     role: Literal["student", "mentor"] = "student"
+
+    model_config = {"populate_by_name": True}
 
 
 class LoginRequest(BaseModel):
@@ -29,16 +31,18 @@ class TokenResponse(BaseModel):
 class UserResponse(BaseModel):
     id: str
     email: str
-    full_name: str
+    full_name: Annotated[str, Field(alias="fullName")]
     role: str
     avatar: Optional[str] = None
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
+    is_active: Annotated[bool, Field(alias="isActive")]
+    created_at: Annotated[datetime, Field(alias="createdAt")]
+    updated_at: Annotated[datetime, Field(alias="updatedAt")]
+
+    model_config = {"populate_by_name": True}
 
 
 class UserUpdate(BaseModel):
-    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    full_name: Annotated[Optional[str], Field(None, min_length=2, max_length=100)]
     avatar: Optional[str] = None
     role: Optional[Literal["student", "admin", "mentor", "superadmin"]] = None
 
@@ -47,13 +51,12 @@ class UserUpdate(BaseModel):
 
 
 class FaceDetectionResponse(BaseModel):
-    faces_detected: int = Field(alias="facesDetected")
+    faces_detected: Annotated[int, Field(alias="facesDetected")]
     confidence: float
     emotion: str
     note: str
 
-    class Config:
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
 
 
 # ── Generic Response Schemas ─────────────────────────────────────────────────

@@ -23,9 +23,10 @@ export default function SceneContainer({
     <div className={`w-full h-full ${className}`}>
       <Canvas
         dpr={[1, 1.5]}
-        frameloop="demand"
-        gl={{ antialias: true, alpha: true }}
+        frameloop="always"
+        gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
         camera={{ position: [0, 0, 5], fov: 45 }}
+        performance={{ min: 0.5 }}
       >
         <Suspense fallback={null}>
           <ambientLight intensity={0.5} />

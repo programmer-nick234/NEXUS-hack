@@ -90,3 +90,43 @@ export interface ProtectedRouteConfig {
   roles: UserRole[];
   redirectTo?: string;
 }
+
+// ─── Interaction / State Analysis ────────────────────────────────────────────
+
+export interface InteractionMetrics {
+  holdDuration: number;
+  movementVariance: number;
+  releaseSpeed: number;
+  interactionRhythm: number;
+  // optional gesture-style fields
+  duration?: number;
+  avgSpeed?: number;
+  directionChanges?: number;
+  variance?: number;
+  pressure?: number;
+}
+
+export interface InterventionParams {
+  breathSpeed: number;
+  color: string;
+  particleSpeed: number;
+}
+
+export interface InterventionParameters {
+  breathSpeed: number;
+  color: string;
+  particleSpeed: number;
+  cameraDistance: number;
+  orbScale: number;
+  ambientIntensity: number;
+}
+
+export type AppPhase = "landing" | "interaction" | "analyzing" | "intervention";
+
+export interface StateAnalysisResult {
+  emotionalState: string;
+  intensity: number;
+  anxietyScore?: number;
+  interventionType: string;
+  parameters: InterventionParameters;
+}

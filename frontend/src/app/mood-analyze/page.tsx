@@ -5,7 +5,6 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Sphere, MeshDistortMaterial, Points, PointMaterial } from "@react-three/drei";
 import * as THREE from "three";
 import { gsap } from "gsap";
-import axios from "axios";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    TYPES
@@ -38,8 +37,9 @@ interface ReportEntry {
    CONSTANTS & PALETTE
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const API_EMOTION = "http://localhost:8000/api/v1/face/detect-emotion";
-const API_ANALYZE = "http://localhost:8000/api/v1/anxiety/analyze-state";
+const API_BASE = "http://localhost:8000/api/v1";
+const API_FACE_ANALYZE = `${API_BASE}/face/analyze`;
+const API_ANXIETY = `${API_BASE}/anxiety/analyze-state`;
 
 const PALETTE = {
   bg: "#0F172A",
@@ -159,6 +159,29 @@ function ThinkingDots() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   HELPER – capture a JPEG blob from a <video> element via a hidden canvas
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function captureFrame(
+  video: HTMLVideoElement,
+  canvas: HTMLCanvasElement,
+): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    if (video.readyState < 2) return resolve(null);
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return resolve(null);
+    ctx.drawImage(video, 0, 0);
+    canvas.toBlob(
+      (blob) => resolve(blob),
+      "image/jpeg",
+      0.70,                           // quality – balance speed vs detail
+    );
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    MAIN PAGE
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -166,7 +189,7 @@ export default function MoodAnalyzePage() {
   // ── Face emotion state ─────────────────────────────────────────────────
   const [faceEmotion, setFaceEmotion] = useState<string>("neutral");
   const [confidence, setConfidence] = useState(0);
-  const [isDetecting, setIsDetecting] = useState(true);
+  const [isDetecting, setIsDetecting] = useState(false);
 
   // ── Gesture / anxiety state ────────────────────────────────────────────
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
@@ -177,9 +200,12 @@ export default function MoodAnalyzePage() {
 
   // ── Refs ────────────────────────────────────────────────────────────────
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);      // hidden capture canvas
   const emojiRef = useRef<HTMLDivElement>(null);
   const centerLabelRef = useRef<HTMLDivElement>(null);
   const gestureZoneRef = useRef<HTMLDivElement>(null);
+  const faceEmotionRef = useRef<string>("neutral");       // always-fresh for callbacks
+  const faceConfRef = useRef<number>(0);
   const gesture = useRef({
     startTime: 0,
     points: [] as { x: number; y: number; t: number }[],
@@ -192,33 +218,67 @@ export default function MoodAnalyzePage() {
   const particleSpeed = analysis?.parameters.particleSpeed ?? 1;
   const isVibrate = analysis?.emotionalState === "overstimulated";
 
-  // ── Webcam ─────────────────────────────────────────────────────────────
+  // ── Start browser webcam ───────────────────────────────────────────────
   useEffect(() => {
     let stream: MediaStream | null = null;
     (async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      } catch { /* camera denied or unavailable */ }
-    })();
-    return () => { stream?.getTracks().forEach((t) => t.stop()); };
-  }, []);
-
-  // ── Backend polling (face emotion) ─────────────────────────────────────
-  useEffect(() => {
-    const id = setInterval(async () => {
-      try {
-        const r = await axios.get(API_EMOTION);
-        if (r.data.success) {
-          setFaceEmotion(r.data.emotion.toLowerCase());
-          setConfidence(r.data.confidence);
-          setIsDetecting(true);
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+        });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
         }
       } catch {
-        setIsDetecting(false);
+        /* camera denied or unavailable */
       }
-    }, 1500);
-    return () => clearInterval(id);
+    })();
+    return () => {
+      stream?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  // ── Frame capture → POST /face/analyze every 2 s ──────────────────────
+  useEffect(() => {
+    let active = true;
+
+    async function loop() {
+      while (active) {
+        try {
+          const video = videoRef.current;
+          const canvas = canvasRef.current;
+          if (video && canvas) {
+            const blob = await captureFrame(video, canvas);
+            if (blob) {
+              const fd = new FormData();
+              fd.append("file", blob, "frame.jpg");
+
+              const res = await fetch(API_FACE_ANALYZE, { method: "POST", body: fd });
+              if (res.ok) {
+                const data = await res.json();
+                if (data.success) {
+                  const emo = (data.emotion as string).toLowerCase();
+                  setFaceEmotion(emo);
+                  setConfidence(data.confidence ?? 0);
+                  faceEmotionRef.current = emo;
+                  faceConfRef.current = data.confidence ?? 0;
+                  setIsDetecting(true);
+                }
+              } else {
+                setIsDetecting(false);
+              }
+            }
+          }
+        } catch {
+          setIsDetecting(false);
+        }
+        // wait 2 seconds before next capture
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+
+    loop();
+    return () => { active = false; };
   }, []);
 
   // ── GSAP emoji bounce on change ────────────────────────────────────────
@@ -255,7 +315,9 @@ export default function MoodAnalyzePage() {
     if (points.length < 2) return;
 
     const duration = Date.now() - startTime;
-    let totalDist = 0, dirChanges = 0, prevAngle: number | null = null;
+    let totalDist = 0;
+    let dirChanges = 0;
+    let prevAngle: number | null = null;
 
     for (let i = 1; i < points.length; i++) {
       const dx = points[i].x - points[i - 1].x;
@@ -267,6 +329,8 @@ export default function MoodAnalyzePage() {
     }
 
     const avgSpeed = totalDist / (duration / 1000);
+
+    // per-segment speeds for variance
     const speeds: number[] = [];
     for (let i = 1; i < points.length; i++) {
       const d = Math.sqrt((points[i].x - points[i - 1].x) ** 2 + (points[i].y - points[i - 1].y) ** 2);
@@ -280,23 +344,39 @@ export default function MoodAnalyzePage() {
     const holdDuration = duration > 1500 && totalDist < 50 ? duration : Math.min(duration * 0.3, 500);
 
     try {
-      const r = await axios.post(API_ANALYZE, {
-        duration, avgSpeed: Math.round(avgSpeed), directionChanges: dirChanges,
-        variance: Math.round(variance * 100) / 100, holdDuration: Math.round(holdDuration),
+      const res = await fetch(API_ANXIETY, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          duration,
+          avgSpeed: Math.round(avgSpeed),
+          directionChanges: dirChanges,
+          variance: Math.round(variance * 100) / 100,
+          holdDuration: Math.round(holdDuration),
+          // ── NEW: forward current face emotion so backend can fuse it ──
+          faceEmotion: faceEmotionRef.current,
+          faceConfidence: faceConfRef.current,
+        }),
       });
-      setAnalysis(r.data);
 
-      setReport((prev) => [
-        {
-          time: new Date().toLocaleTimeString(),
-          emotion: faceEmotion,
-          anxiety: r.data.anxietyScore,
-          state: r.data.emotionalState,
-        },
-        ...prev.slice(0, 9),
-      ]);
-    } catch { /* backend unavailable */ }
-  }, [faceEmotion]);
+      if (res.ok) {
+        const data = await res.json();
+        setAnalysis(data);
+
+        setReport((prev) => [
+          {
+            time: new Date().toLocaleTimeString(),
+            emotion: faceEmotionRef.current,
+            anxiety: data.anxietyScore,
+            state: data.emotionalState,
+          },
+          ...prev.slice(0, 9),
+        ]);
+      }
+    } catch {
+      /* backend unavailable */
+    }
+  }, []);
 
   // ── Display state label ────────────────────────────────────────────────
   const displayState = analysis?.emotionalState ?? faceEmotion;
@@ -304,6 +384,9 @@ export default function MoodAnalyzePage() {
 
   return (
     <main className="relative w-screen h-screen overflow-hidden select-none font-sans" style={{ background: PALETTE.bg }}>
+      {/* Hidden canvas used to snapshot the <video> element */}
+      <canvas ref={canvasRef} className="hidden" />
+
       {/* ── Ambient glow overlay ── */}
       <div className="absolute inset-0 pointer-events-none transition-colors duration-700 opacity-10" style={{ backgroundColor: activeColor }} />
 
@@ -328,9 +411,9 @@ export default function MoodAnalyzePage() {
           </div>
           {/* Emotion breakdown bars */}
           <div className="space-y-1.5 mt-1">
-            {["happy", "sad", "angry", "neutral", "surprised"].map((e) => (
+            {(["happy", "sad", "angry", "neutral", "surprised", "fear", "disgust"] as const).map((e) => (
               <div key={e} className="flex items-center gap-2">
-                <span className="text-[9px] uppercase w-14 text-right font-medium" style={{ color: PALETTE.textMuted }}>{e}</span>
+                <span className="text-[9px] uppercase w-16 text-right font-medium" style={{ color: PALETTE.textMuted }}>{e}</span>
                 <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: PALETTE.surfaceLight }}>
                   <div className="h-full rounded-full transition-all duration-500" style={{ width: faceEmotion === e ? `${Math.max(confidence * 100, 20)}%` : "5%", background: EMOTION_COLORS[e] }} />
                 </div>
